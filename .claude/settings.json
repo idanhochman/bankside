@@ -1,0 +1,71 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(gh issue *)",
+      "Bash(gh pr create *)",
+      "Bash(gh pr view *)",
+      "Bash(gh pr list *)",
+      "Bash(gh pr diff *)",
+      "Bash(gh pr checks *)",
+      "Bash(gh pr comment *)",
+      "Bash(gh pr edit *)",
+      "Bash(gh label list *)",
+      "Bash(gh label create *)",
+      "Bash(gh project *)",
+      "Bash(gh search *)",
+      "Bash(git status *)",
+      "Bash(git diff *)",
+      "Bash(git log *)",
+      "Bash(git show *)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(git switch *)",
+      "Bash(git branch *)",
+      "Bash(git fetch *)",
+      "Bash(git pull *)",
+      "Bash(git push -u origin *)"
+    ],
+    "deny": [
+      "Bash(gh api *)",
+      "Bash(gh auth *)",
+      "Bash(gh pr merge *)",
+      "Bash(gh repo *)",
+      "Bash(gh ssh-key *)",
+      "Bash(gh gpg-key *)",
+      "Bash(gh secret *)",
+      "Bash(gh variable *)",
+      "Bash(gh gist *)",
+      "Bash(gh release *)",
+      "Bash(gh extension *)",
+      "Bash(gh alias *)",
+      "Bash(gh issue delete *)",
+      "Bash(gh issue transfer *)",
+      "Bash(gh label delete *)",
+      "Bash(git push --force *)",
+      "Bash(git push -f *)",
+      "Bash(git push * --force *)",
+      "Bash(git push * -f *)",
+      "Bash(git push origin main)",
+      "Bash(git push * main)",
+      "Bash(ssh *)",
+      "Read(~/.ssh/**)",
+      "Read(~/.config/gh/**)",
+      "Edit(.claude/**)",
+      "Edit(CLAUDE.md)",
+      "Edit(src/common/util/**)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Write|Edit|MultiEdit|NotebookEdit|Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/guard.py\""
+          }
+        ]
+      }
+    ]
+  }
+}
