@@ -8,7 +8,8 @@ Checks, in order:
   3. The opcode and operand-code tables match the yaml.
   4. The legal-combination counts, computed from the yaml, match the guide.
   5. The guide's assembler examples assemble from the yaml encoding, decode
-     back to the same text, and are legal.
+     back to the same text, and are legal; the [TOP-ISA-22] and [TOP-ISA-23]
+     cases; every instruction word the guide writes out encodes as written.
   6. Requirement IDs: each is defined (in bold) exactly once, and every
      reference points to a defined ID.
   7. Every relative Markdown link resolves, including #anchors.
@@ -135,6 +136,18 @@ for line in lc.splitlines():
         n = len(combos(m.group(1)))
         print(f"       {m.group(1):4} yaml {n:3}  guide {m.group(2)}")
         check(n == int(m.group(2)), f"count {m.group(1)}: yaml {n}, guide {m.group(2)}")
+
+# [TOP-ISA-22]: MAC and MAD take exactly MUL's 16 source pairs.
+def src_pairs(name):
+    return {(dict(c)["src0"], dict(c)["src1"]) for c in combos(name)}
+
+
+for op in ("MAC", "MAD"):
+    check(src_pairs(op) == src_pairs("MUL"), f"ISA-22: {op} source pairs != MUL's")
+print(f"       MAC, MAD source pairs == MUL's: {len(src_pairs('MUL'))} [TOP-ISA-22]")
+# [TOP-ISA-23]: MAD's SRC2 is SRF_A in every legal combination.
+check({dict(c)["src2"] for c in combos("MAD")} == {"SRF_A"}, "ISA-23: MAD src2")
+print("       MAD src2 in every legal combination: SRF_A [TOP-ISA-23]")
 done("4 legal-combination counts from the yaml == guide table")
 
 
@@ -203,7 +216,7 @@ def decode(w):
         fields.append("src2")
     parts = []
     for f in fields:
-        name = CODE2OP[get(w, fmt, f)]
+        name = CODE2OP.get(get(w, fmt, f), "reserved")
         idx_field = "src1_idx" if f == "src2" else f + "_idx"
         parts.append(name if name in BANKS else f"{name}[{get(w, fmt, idx_field)}]")
     if mn == "MOV" and get(w, fmt, "relu"):
@@ -257,6 +270,31 @@ except AssertionError:
 w = put(assemble("ADD GRF_A[2], EVEN_BANK, SRF_A[0]"), "alu", "src2", 7)
 check(legal(w), "ISA-10: reserved SRC2 made ADD illegal")
 print(f"       0x{w:08X}  ADD GRF_A[2], EVEN_BANK, SRF_A[0] with SRC2 = 7: legal")
+# [TOP-ISA-23]: a MAD whose SRC2 isn't SRF_A is illegal, whatever it holds.
+base = assemble("MAD GRF_A[0], ODD_BANK, SRF_M[2], SRF_A[2]")
+for code in range(8):
+    w = (base & ~(7 << 16)) | (code << 16)
+    check(legal(w) == (code == OPS["SRF_A"]["code"]), f"ISA-23: SRC2 = {code}")
+print(f"       MAD ... SRF_M[2], <SRC2 = 0..7>: legal only for {OPS['SRF_A']['code']} (SRF_A)")
+# [TOP-ISA-22]: the same-file pairs are legal for MAC and MAD.
+for line in ("MAC GRF_B[0], GRF_A[1], GRF_A[2]", "MAC GRF_B[0], GRF_B[1], GRF_B[2]",
+             "MAD GRF_A[0], GRF_A[1], GRF_A[2], SRF_A[2]"):
+    w = assemble(line)
+    check(legal(w), f"ISA-22: {line} illegal")
+    print(f"       0x{w:08X}  {line}: legal")
+# Every `instruction` | `0xWORD` row in a guide table encodes as written, and
+# the bankside column says "illegal" exactly when the word is illegal.
+for m in re.finditer(r"^\| `([^`]+)` \| `0x([0-9A-F]{8})` \| ([^|]*)\|", guide, re.M):
+    line, word, what = m.group(1), int(m.group(2), 16), m.group(3)
+    w = assemble(line)
+    check(w == word, f"table word {line}: 0x{word:08X}, assembles to 0x{w:08X}")
+    check(legal(w) == (not what.strip().startswith("illegal")), f"table legality {line}")
+    print(f"       0x{w:08X}  {line}: {'legal' if legal(w) else 'illegal'} (guide table)")
+# ... and so does every "`instruction` (`0xWORD`)" in the guide's prose.
+for m in re.finditer(r"`([A-Z]+ [^`]+)` \(`0x([0-9A-F]{8})`\)", guide):
+    w = assemble(m.group(1))
+    check(w == int(m.group(2), 16), f"prose word {m.group(1)}: 0x{m.group(2)}, assembles to 0x{w:08X}")
+    print(f"       0x{w:08X}  {m.group(1)} (guide prose)")
 done(f"5 {n} example lines assemble, decode back and are legal")
 
 # 6. requirement IDs ------------------------------------------------------------------

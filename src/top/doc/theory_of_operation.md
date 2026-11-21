@@ -290,7 +290,8 @@ and the ANEMOS and NumPy columns come from runs it compares against
   the trigger ([interfaces.md](interfaces.md)).
 - **[TOP-ARCH-7]** At most one bank operand per instruction (one column read per
   command). **[paper]** (Table II's MUL and ADD combination counts follow from
-  it; see the programmer's guide for MAC/MAD).
+  it; for MAC and MAD see [TOP-ISA-22] in the
+  [programmer's guide](programmers_guide.md#legal-combinations-compared-with-the-paper)).
 - **[TOP-ARCH-8]** Bank writes (MOV/FILL to a bank) are driven in S5, to the address
   of the instruction's own triggering command. **[bankside]**, v1 only; v2
   revisits this against the real DRAM write timing.

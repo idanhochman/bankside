@@ -1,0 +1,35 @@
+Table III, page 5: header columns at x = 104.5 .. 543.3
+  Control paper: OPCODE 31-28, U 27-19, IMM0 18-11, IMM1 10-0
+  Data    paper: OPCODE 31-28, DST 27-25, SRC0 24-22, U 21-13, R 12, U 11, DST# 10-8, U 7, SRC0# 6-4, U 3, SRC1# 2-0
+          bit  0: paper src1_idx, yaml None  [known]
+          bit  1: paper src1_idx, yaml None  [known]
+          bit  2: paper src1_idx, yaml None  [known]
+  ALU     paper: OPCODE 31-28, DST 27-25, SRC0 24-22, SRC1 21-19, SRC2 18-16, A 15, U 14-12, U 11, DST# 10-8, U 7, SRC0# 6-4, U 3, SRC1# 2-0
+result: yaml matches Table III (apart from the known data-format bits 2-0)
+
+Table II (plain text, columns: op, SRC0, SRC1, DST, # of combinations):
+  TABLE II: The supporting operations, operand sources, and
+  result destination.
+  Op. Type Operand
+  (SRC0)
+  Operand
+  (SRC1)
+  Result
+  (DST)
+  # of
+  Combinations
+  MUL GRF, BANK GRF, BANK,
+  SRF M GRF 32
+  ADD GRF, BANK,
+  SRF A
+  GRF, BANK,
+  SRF A GRF 40
+  MAC GRF, BANK GRF, BANK,
+  SRF M GRF B 14
+  MAD GRF, BANK GRF, BANK, SRF M
+  SRF A (for SRC2) GRF 28
+  MOV
+  (ReLU) GRF, BANK GRF 24
+
+Section III-C, page 6:
+  MAC performs an operation like GRF B += GRF A × BANK where SRC2 (GRF B) points to the same GRF register as DST. MAD does an operation like GRFA = BANK× SRF M + SRF A where SRC1 # and SRC2 # point to the same register index but in different register ﬁles (e.g., SRFM and SRF A, respectively).
