@@ -1,0 +1,52 @@
+ok   1 yaml parses; fields fit in 32 bits and don't overlap
+ok   2 guide format table == yaml formats (all 32 bits, 3 formats)
+ok   3 opcode and operand-code tables == yaml; reserved sets match
+       MUL  yaml  32  guide 32
+       ADD  yaml  40  guide 40
+       MAC  yaml  16  guide 16
+       MAD  yaml  32  guide 32
+       MOV  yaml  20  guide 20
+       FILL yaml   4  guide 4
+ok   4 legal-combination counts from the yaml == guide table
+       0x41000000  MOV GRF_A[0], EVEN_BANK
+       0x10000802  JUMP -1, 2
+       0x20000000  EXIT
+       0x00001000  NOP 2
+       0x10001807  JUMP -3, 7
+       0x20000000  EXIT
+       0x41000000  MOV GRF_A[0], EVEN_BANK
+       0x48001000  MOV(RELU) EVEN_BANK, GRF_A[0]
+       0x53400100  FILL GRF_B[1], ODD_BANK
+       0x81180200  ADD GRF_A[2], EVEN_BANK, SRF_A[0]
+       0x92100314  MUL GRF_B[3], GRF_A[1], SRF_M[4]
+       0xA1530002  MAD GRF_A[0], ODD_BANK, SRF_M[2], SRF_A[2]
+       0xB3100000  MAC GRF_B[0], EVEN_BANK, SRF_M[0]
+       0x43400000  MOV GRF_B[0], ODD_BANK
+       0xB3100000  MAC GRF_B[0], EVEN_BANK, SRF_M[0]
+       0xB3500001  MAC GRF_B[0], ODD_BANK, SRF_M[1]
+       0xB3100002  MAC GRF_B[0], EVEN_BANK, SRF_M[2]
+       0xB3500003  MAC GRF_B[0], ODD_BANK, SRF_M[3]
+       0xB3100004  MAC GRF_B[0], EVEN_BANK, SRF_M[4]
+       0xB3500005  MAC GRF_B[0], ODD_BANK, SRF_M[5]
+       0xB3100006  MAC GRF_B[0], EVEN_BANK, SRF_M[6]
+       0xB3500007  MAC GRF_B[0], ODD_BANK, SRF_M[7]
+       0x00001000  NOP 2
+       0x4A400000  MOV ODD_BANK, GRF_B[0]
+       0x20000000  EXIT
+       0x41001000  MOV(RELU) GRF_A[0], EVEN_BANK
+       0x00001000  NOP 2
+       0x48000000  MOV EVEN_BANK, GRF_A[0]
+       0x10001803  JUMP -3, 3
+       0x20000000  EXIT
+       0xA0630015  MAD GRF_A[0], GRF_B[1], EVEN_BANK, SRF_A[5]  (SRC1# = 5)
+       rejected  MAD GRF_A[0], GRF_B[1], SRF_M[2], SRF_A[3]  (j != SRC1#)
+       0x811F0200  ADD GRF_A[2], EVEN_BANK, SRF_A[0] with SRC2 = 7: legal
+ok   5 30 example lines assemble, decode back and are legal
+       ARCH [1, 2, 3, 4, 5, 6, 7, 8]
+       FP   [1, 2, 3, 4, 5, 6, 7, 8]
+       HAZ  [1, 2, 3, 4, 5, 6]
+       IF   [1, 2, 3, 4, 5, 6, 7]
+       ISA  [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21]
+       PIPE [1, 2, 3]
+ok   6 53 IDs, each defined once; all references defined
+ok   7 19 relative links resolve

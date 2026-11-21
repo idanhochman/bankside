@@ -1,6 +1,6 @@
 # top
 
-<!-- One or two lines: what this module does. The architect fills this in. -->
+The whole bankside unit: one near-bank FP16 SIMD compute unit serving a pair of DRAM banks. Its spec is in [doc/](doc/README.md), with the ISA in [doc/bankside_isa.yaml](doc/bankside_isa.yaml).
 
 - **Requirement ID prefix:** `TOP` (e.g. `[TOP-1]`). Never reused.
 - **Parent:** none

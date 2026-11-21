@@ -41,28 +41,33 @@ register files. **[bankside]** throughout, unless marked.
 | `dbg_rd_sel`, `dbg_rd_idx` | in | 3, 5 | As `cfg_wr_sel` / `cfg_wr_idx` |
 | `dbg_rd_data` | out | 256 | Combinational read of the selected entry |
 | **Status** | | | |
-| `busy` | out | 1 | An instruction is in flight, a multi-cycle NOP is running, or a loop is active |
-| `err_illegal` | out | 1 | Sticky: an illegal instruction was executed ([ISA-2]); cleared by reset |
+| `busy` | out | 1 | The unit is not idle ([TOP-IF-7]) |
+| `err_illegal` | out | 1 | Sticky: an illegal instruction was executed ([TOP-ISA-2]); cleared by reset |
 
 ## Timing
 
-- **[IF-1]** A cycle with `trig_valid = 1` is one issue slot. The instruction
+- **[TOP-IF-1]** A cycle with `trig_valid = 1` is one issue slot. The instruction
   at the PC enters S1 in that cycle (or, during a multi-cycle NOP, one NOP slot
   is consumed).
-- **[IF-2]** **Bank read.** In the S1 cycle the unit drives `bank_rd_en`,
+- **[TOP-IF-2]** **Bank read.** In the S1 cycle the unit drives `bank_rd_en`,
   `bank_rd_sel` and the address. The bank samples them at the end of that
   cycle and must drive `bank_rd_data` during the next cycle (S2), like a
   synchronous SRAM with one cycle of read latency.
-- **[IF-3]** **Bank write.** `bank_wr_*` are registered outputs, valid in the
+- **[TOP-IF-3]** **Bank write.** `bank_wr_*` are registered outputs, valid in the
   S5 cycle. The bank writes at the end of that cycle. Writes take effect
-  before reads sampled on the same edge ([HAZ-6]).
-- **[IF-4]** **Reset.** On `rst_n = 0`: PC ← 0, loop and NOP counters cleared,
+  before reads sampled on the same edge ([TOP-HAZ-6]).
+- **[TOP-IF-4]** **Reset.** On `rst_n = 0`: PC ← 0, the loop state
+  (`loop_active`, `loop_cnt`, [TOP-ISA-3]) and the NOP counter cleared,
   all pipeline stages invalid, `err_illegal` ← 0. Register files keep their
-  contents ([ARCH-5]).
-- **[IF-5]** **Configuration writes** take effect at the end of the cycle.
+  contents ([TOP-ARCH-5]).
+- **[TOP-IF-5]** **Configuration writes** take effect at the end of the cycle.
   A written entry can be read by `dbg_rd_*` in the next cycle.
-- **[IF-6]** The host must write register files only while `busy = 0` and
-  `trig_valid = 0`.
+- **[TOP-IF-6]** The host must write register files only while `busy = 0` and
+  `trig_valid = 0`. This is a programming rule for the host
+  ([programmer's guide](programmers_guide.md#programming-rules)).
+- **[TOP-IF-7]** **Busy.** `busy` = 1 while any of these holds: an instruction
+  is valid in any of S1 to S5, a multi-cycle NOP has slots left
+  ([TOP-ISA-12]), or `loop_active` = 1 ([TOP-ISA-3]). Otherwise `busy` = 0.
 
 Waveforms for these (WaveDrom) will be added with the RTL.
 
