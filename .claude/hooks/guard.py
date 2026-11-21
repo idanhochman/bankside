@@ -25,7 +25,7 @@ import sys
 import tempfile
 
 OWNED = {
-    "architect": ["src/*/doc/**"],
+    "architect": ["src/*/doc/**", "src/*/README.md"],
     "designer": ["src/*/rtl/**", "src/*/syn/**"],
     "dv": ["src/*/dv/**", "src/*/opendv.yaml", "opendv.yaml",
            ".github/workflows/**"],

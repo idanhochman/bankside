@@ -34,7 +34,7 @@ outside your paths.
 
 | Path | Owner |
 |---|---|
-| `src/*/doc/` (the module's spec) | architect |
+| `src/*/doc/` (the module's spec), `src/*/README.md` | architect |
 | `src/*/rtl/`, `src/*/syn/` | designer |
 | `src/*/dv/`, `src/*/opendv.yaml`, the root `opendv.yaml`, `.github/workflows/` | DV |
 | `pm/`, `README.md`, `.github/ISSUE_TEMPLATE/`, `.github/pull_request_template.md` | PM (milestones change only when the user asks) |

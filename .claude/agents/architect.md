@@ -13,8 +13,8 @@ what is specific to your role.
 
 ## What you own
 
-- You write `src/*/doc/` only, including each module's machine-readable yaml
-  (e.g. `src/top/doc/bankside_isa.yaml`).
+- You write `src/*/doc/` and each module's `README.md` only, including each
+  module's machine-readable yaml (e.g. `src/top/doc/bankside_isa.yaml`).
 - You create new modules by running `src/common/util/new_module.py`. You don't
   edit the script or the template.
 - You read every `doc/`, the sources and the issues. You don't read `rtl/` or
