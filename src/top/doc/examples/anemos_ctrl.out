@@ -1,0 +1,97 @@
+Layout (src/opcodes.h): msb lsb
+  OPCODE 31 28
+  DST 27 25
+  SRC0 24 22
+  SRC1 21 19
+  SRC2 18 16
+  RELU 15 15
+  AAM 15 15
+  DST# 14 10
+  SRC0# 9 5
+  SRC1# 4 0
+  IMM0 18 11
+  IMM1 10 0
+Word MUL GRF_B[3], GRF_A[1], SRF_M[4] 0x92100C24
+Word MOV(RELU) GRF_A[3], EVEN_BANK 0x41008C00
+Word JUMP -3, 7 0x10001807
+
+Case A: JUMP -1, 2 (slots per JUMP)
+  cycle trig  PC  word  nop_cnt act cnt  -> count_en jump_en pc_rst
+      1    1   0  MOV         0   0   0  -> 1 0 0
+      2    1   1  JUMP        0   0   0  -> 0 1 0
+      3    1   0  MOV         0   1   1  -> 1 0 0
+      4    1   1  JUMP        0   1   1  -> 0 1 0
+      5    1   0  MOV         0   1   0  -> 1 0 0
+      6    1   1  JUMP        0   1   0  -> 1 0 0
+      7    1   2  EXIT        0   0   0  -> 1 0 1
+      8    1   0  MOV         0   0   0  -> 1 0 0
+
+Case B: JUMP -0, 3 at PC 1 (IMM0 = 0, TOP-ISA-14)
+  cycle trig  PC  word  nop_cnt act cnt  -> count_en jump_en pc_rst
+      1    1   0  MOV         0   0   0  -> 1 0 0
+      2    1   1  JUMP        0   0   0  -> 0 1 0
+      3    1   1  JUMP        0   1   2  -> 0 1 0
+      4    1   1  JUMP        0   1   1  -> 0 1 0
+      5    1   1  JUMP        0   1   0  -> 1 0 0
+      6    1   2  EXIT        0   0   0  -> 1 0 1
+      7    1   0  MOV         0   0   0  -> 1 0 0
+
+Case C: JUMP -5, 1 at PC 2 (IMM0 > PC, TOP-ISA-14)
+  cycle trig  PC  word  nop_cnt act cnt  -> count_en jump_en pc_rst
+      1    1   0  MOV         0   0   0  -> 1 0 0
+      2    1   1  MOV         0   0   0  -> 1 0 0
+      3    1   2  JUMP        0   0   0  -> 0 1 0
+      4    1 253  NOP         0   1   0  -> 1 0 0
+      5    1   0  MOV       255   1   0  -> 0 0 0
+      6    1   0  MOV       254   1   0  -> 0 0 0
+
+Case D: nested loops (TOP-ISA-6)
+  cycle trig  PC  word  nop_cnt act cnt  -> count_en jump_en pc_rst
+      1    1   0  MOV         0   0   0  -> 1 0 0
+      2    1   1  MOV         0   0   0  -> 1 0 0
+      3    1   2  JUMP        0   0   0  -> 0 1 0
+      4    1   1  MOV         0   1   0  -> 1 0 0
+      5    1   2  JUMP        0   1   0  -> 1 0 0
+      6    1   3  MOV         0   0   0  -> 1 0 0
+      7    1   4  JUMP        0   0   0  -> 0 1 0
+      8    1   0  MOV         0   1   0  -> 1 0 0
+      9    1   1  MOV         0   1   0  -> 1 0 0
+     10    1   2  JUMP        0   1   0  -> 1 0 0
+     11    1   3  MOV         0   0   0  -> 1 0 0
+     12    1   4  JUMP        0   0   0  -> 0 1 0
+     13    1   0  MOV         0   1   0  -> 1 0 0
+     14    1   1  MOV         0   1   0  -> 1 0 0
+     15    1   2  JUMP        0   1   0  -> 1 0 0
+     16    1   3  MOV         0   0   0  -> 1 0 0
+     17    1   4  JUMP        0   0   0  -> 0 1 0
+     18    1   0  MOV         0   1   0  -> 1 0 0
+     19    1   1  MOV         0   1   0  -> 1 0 0
+     20    1   2  JUMP        0   1   0  -> 1 0 0
+     21    1   3  MOV         0   0   0  -> 1 0 0
+     22    1   4  JUMP        0   0   0  -> 0 1 0
+     23    1   0  MOV         0   1   0  -> 1 0 0
+     24    1   1  MOV         0   1   0  -> 1 0 0
+
+Case E: JUMP after a JUMP (TOP-ISA-7)
+  cycle trig  PC  word  nop_cnt act cnt  -> count_en jump_en pc_rst
+      1    1   0  MOV         0   0   0  -> 1 0 0
+      2    1   1  JUMP        0   0   0  -> 0 1 0
+      3    1   0  MOV         0   1   0  -> 1 0 0
+      4    1   1  JUMP        0   1   0  -> 1 0 0
+      5    1   2  JUMP        0   0   0  -> 0 1 0
+      6    1   0  MOV         0   1 4294967295  -> 1 0 0
+      7    1   1  JUMP        0   1 4294967295  -> 0 1 0
+
+Case F: NOP 3 with a trigger every 2nd cycle
+  cycle trig  PC  word  nop_cnt act cnt  -> count_en jump_en pc_rst
+      1    1   0  NOP         0   0   0  -> 1 0 0
+      2    0   1  MOV         2   0   0  -> 0 0 0
+      3    1   1  MOV         1   0   0  -> 0 0 0
+      4    0   1  MOV         0   0   0  -> 0 0 0
+      5    1   1  MOV         0   0   0  -> 1 0 0
+      6    0   2  EXIT        0   0   0  -> 0 0 0
+      7    1   2  EXIT        0   0   0  -> 1 0 1
+      8    0   0  NOP         0   0   0  -> 0 0 0
+      9    1   0  NOP         0   0   0  -> 1 0 0
+     10    0   1  MOV         2   0   0  -> 0 0 0
+

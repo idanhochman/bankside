@@ -69,22 +69,28 @@ operands:
 # instruction passes through all five stages; unused ones just carry it along.
 # slots: issue slots (triggering commands) consumed.
 instructions:
+  # Control instructions have no operand fields, so no `legal` list. A field
+  # an instruction doesn't use is listed under `ignored` [TOP-ISA-25].
   NOP:
     opcode: 0
     format: control
     slots: imm0          # IMM0 = number of slots; IMM0 = 0 is treated as 1 [TOP-ISA-12]
+    ignored: [imm1]
   JUMP:
     opcode: 1
     format: control
     slots: 0             # resolved in fetch [TOP-ISA-4]
-    # IMM0 = backward offset (target = PC - IMM0); programs keep it in 1..PC
-    #        [TOP-ISA-14]
+    # IMM0 = backward offset (target = PC - IMM0), 1..PC [TOP-ISA-14]
     # IMM1 = number of jumps taken; the body runs IMM1 + 1 times; 0 = never
     #        jump [TOP-ISA-13]. Loop state and transitions: [TOP-ISA-3].
+    # The one legality rule that depends on where the word sits: a JUMP at
+    # PC p with IMM0 = 0 or IMM0 > p is illegal [TOP-ISA-26].
+    illegal_when: imm0 == 0 or imm0 > pc
   EXIT:
     opcode: 2
     format: control
     slots: 1             # PC <- 0, loop state cleared [TOP-ISA-5]
+    ignored: [imm0, imm1]
   MOV:
     opcode: 4
     format: data
@@ -172,3 +178,8 @@ constraints:
 
 # v1 has no AAM: an ALU instruction with aam = 1 is illegal (v2 adds it).
 v1_illegal: [aam_set]
+
+# Lanes of a 256-bit value (GRF entry, bank column): lane l is bits
+# [16*l + 15, 16*l]. MOV from a GRF into an SRF takes lane 0 [TOP-ISA-29].
+lanes: 16
+lane_width: 16

@@ -42,7 +42,7 @@ register files. **[bankside]** throughout, unless marked.
 | `dbg_rd_data` | out | 256 | Combinational read of the selected entry |
 | **Status** | | | |
 | `busy` | out | 1 | The unit is not idle ([TOP-IF-7]) |
-| `err_illegal` | out | 1 | Sticky: an illegal instruction was executed ([TOP-ISA-2]); cleared by reset |
+| `err_illegal` | out | 1 | Sticky: an illegal instruction was executed ([TOP-ISA-2]); set at the end of its S1 cycle ([TOP-ISA-24]); cleared by reset |
 
 ## Timing
 
@@ -65,6 +65,36 @@ register files. **[bankside]** throughout, unless marked.
 - **[TOP-IF-6]** The host must write register files only while `busy = 0` and
   `trig_valid = 0`. This is a programming rule for the host
   ([programmer's guide](programmers_guide.md#programming-rules)).
+- **[TOP-IF-8]** **A configuration write that breaks [TOP-IF-6] is
+  ignored.** In a cycle with `cfg_wr_en` = 1 and `busy` = 1 or
+  `trig_valid` = 1, no register-file or CRF entry changes. The S5 write of
+  that cycle, if any, goes ahead as usual. The `busy` used is the output's
+  value in that same cycle ([TOP-IF-7]; its exact cycles are #24). The
+  [TOP-IF-6] assertion still fires, and nothing is flagged on the ports.
+  **[bankside]** Options weighed:
+  - the S5 write wins only when both write the same file, and the
+    configuration write goes ahead otherwise (closest to ANEMOS, below).
+    But then a write that lands mid-run depends on what is in the pipeline
+    that cycle and, for the CRF, on how the fetch reads ahead (#27).
+  - the configuration write wins. That drops an instruction's result
+    without a trace.
+  - ignore it whenever the rule is broken (chosen). The outcome depends only
+    on `busy` and `trig_valid`, both visible on the ports. It costs one gate
+    on `cfg_wr_en`, and no register or CRF entry can change under a running
+    program.
+
+  ANEMOS applies a host register write while a kernel runs. If an
+  instruction's write-back to the same file falls in the same cycle, the
+  decoder ORs the two writes' enables, indices and source selects bit by
+  bit (`instr_decoder.cpp`, `out_method`, at `f2d4018`; read, not run). That
+  isn't a behaviour to copy.
+
+  Worked case: after a kernel's last trigger in cycle *c*, its last
+  instruction writes GRF_B[0] in S5 at cycle *c* + 4, so `busy` = 1 up to
+  then at least. A host write of SRF_A[0] in cycle *c* + 2 is ignored:
+  `dbg_rd_*` still shows the old SRF_A[0] in cycle *c* + 3. The same write
+  in the first cycle with `busy` = 0 and `trig_valid` = 0 takes effect
+  ([TOP-IF-5]).
 - **[TOP-IF-7]** **Busy.** `busy` = 1 while any of these holds: an instruction
   is valid in any of S1 to S5, a multi-cycle NOP has slots left
   ([TOP-ISA-12]), or `loop_active` = 1 ([TOP-ISA-3]). Otherwise `busy` = 0.

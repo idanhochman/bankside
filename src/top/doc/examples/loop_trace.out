@@ -10,11 +10,13 @@ Case 1: JUMP -1, 2 (bankside)
   body ran 3 times (IMM1 + 1 = 3)
 
 Case 2: times the body runs, `JUMP -1, IMM1`
-  IMM1  bankside  ANEMOS
-     0         1  >10000 (still looping, cnt 4294957297)
-     1         2  2
-     2         3  3
-     7         8  8
+  (slots: triggering commands up to and including EXIT; ANEMOS spends
+  one on every JUMP fetch, bankside none, [TOP-ISA-4])
+  IMM1  bankside body/slots  ANEMOS body/slots
+     0           1/2       >5000 (still looping, cnt 4294962296)
+     1           2/3       2/5
+     2           3/4       3/7
+     7           8/9       8/17
 
 Case 3: slots taken by `NOP IMM0`
   IMM0  bankside  ANEMOS
@@ -29,5 +31,88 @@ Case 5: ReLU kernel, `JUMP -3, n-1`: body runs
   n = 1: 1 times, 5 slots (4 per column + EXIT)
   n = 2: 2 times, 9 slots (4 per column + EXIT)
   n = 5: 5 times, 21 slots (4 per column + EXIT)
+
+Case 6: JUMP -0, 3 at PC 1, IMM0 = 0 ([TOP-ISA-14] broken, [TOP-ISA-26])
+
+    PC 0  MOV GRF_A[0], EVEN_BANK
+    PC 1  JUMP -0, 3
+    PC 2  EXIT
+
+| Slot | bankside: issued | `err_illegal` | bankside loop state after | ANEMOS: decoded | ANEMOS loop state after |
+|---|---|---|---|---|---|
+| 1 | PC 0 MOV | 0 | active 0 | PC 0 MOV | active 0 |
+| 2 | PC 1 JUMP illegal | 1 | active 0 | PC 1 JUMP | active 1, cnt 2 |
+| 3 | PC 2 EXIT | 1 | active 0 | PC 1 JUMP | active 1, cnt 1 |
+| 4 | PC 0 MOV | 1 | active 0 | PC 1 JUMP | active 1, cnt 0 |
+
+  ANEMOS column == anemos_ctrl.out case B, 4 commands: True
+
+Case 7: JUMP -5, 1 at PC 2, IMM0 > PC ([TOP-ISA-14] broken, [TOP-ISA-26])
+
+    PC 0  MOV GRF_A[0], EVEN_BANK
+    PC 1  MOV GRF_B[0], ODD_BANK
+    PC 2  JUMP -5, 1
+    PC 3  EXIT
+
+| Slot | bankside: issued | `err_illegal` | bankside loop state after | ANEMOS: decoded | ANEMOS loop state after |
+|---|---|---|---|---|---|
+| 1 | PC 0 MOV | 0 | active 0 | PC 0 MOV | active 0 |
+| 2 | PC 1 MOV | 0 | active 0 | PC 1 MOV | active 0 |
+| 3 | PC 2 JUMP illegal | 1 | active 0 | PC 2 JUMP | active 1, cnt 0 |
+| 4 | PC 3 EXIT | 1 | active 0 | PC 253 NOP | active 1, cnt 0 |
+| 5 | PC 0 MOV | 1 | active 0 | (NOP slot) | active 1, cnt 0 |
+
+  ANEMOS column == anemos_ctrl.out case C, 5 commands: True
+
+Case 8: nested loops ([TOP-ISA-6] broken, [TOP-ISA-28])
+
+    PC 0  MOV GRF_A[0], EVEN_BANK
+    PC 1  MOV GRF_B[0], ODD_BANK
+    PC 2  JUMP -1, 1
+    PC 3  MOV GRF_A[1], EVEN_BANK
+    PC 4  JUMP -4, 1
+    PC 5  EXIT
+
+| Slot | bankside: issued | `err_illegal` | bankside loop state after | ANEMOS: decoded | ANEMOS loop state after |
+|---|---|---|---|---|---|
+| 1 | PC 0 MOV | 0 | active 0 | PC 0 MOV | active 0 |
+| 2 | PC 1 MOV | 0 | active 0 | PC 1 MOV | active 0 |
+| 3 | PC 1 MOV | 0 | active 1, cnt 0 | PC 2 JUMP | active 1, cnt 0 |
+| 4 | PC 3 MOV | 0 | active 0 | PC 1 MOV | active 1, cnt 0 |
+| 5 | PC 0 MOV | 0 | active 1, cnt 0 | PC 2 JUMP | active 0 |
+| 6 | PC 1 MOV | 0 | active 1, cnt 0 | PC 3 MOV | active 0 |
+| 7 | PC 3 MOV | 0 | active 0 | PC 4 JUMP | active 1, cnt 0 |
+| 8 | PC 0 MOV | 0 | active 1, cnt 0 | PC 0 MOV | active 1, cnt 0 |
+| 9 | PC 1 MOV | 0 | active 1, cnt 0 | PC 1 MOV | active 1, cnt 0 |
+| 10 | PC 3 MOV | 0 | active 0 | PC 2 JUMP | active 0 |
+| 11 | PC 0 MOV | 0 | active 1, cnt 0 | PC 3 MOV | active 0 |
+| 12 | PC 1 MOV | 0 | active 1, cnt 0 | PC 4 JUMP | active 1, cnt 0 |
+| 13 | PC 3 MOV | 0 | active 0 | PC 0 MOV | active 1, cnt 0 |
+| 14 | PC 0 MOV | 0 | active 1, cnt 0 | PC 1 MOV | active 1, cnt 0 |
+
+  ANEMOS column == anemos_ctrl.out case D, 14 commands: True
+
+  bankside reaches EXIT within 1000 slots: False (meant: PC 1 runs 4 times, EXIT in slot 9)
+
+Case 9: a JUMP right after a JUMP ([TOP-ISA-7] broken, [TOP-ISA-27])
+
+    PC 0  MOV GRF_A[0], EVEN_BANK
+    PC 1  JUMP -1, 1
+    PC 2  JUMP -2, 0
+    PC 3  EXIT
+
+| Slot | bankside: issued | `err_illegal` | bankside loop state after | ANEMOS: decoded | ANEMOS loop state after |
+|---|---|---|---|---|---|
+| 1 | PC 0 MOV | 0 | active 0 | PC 0 MOV | active 0 |
+| 2 | PC 0 MOV | 0 | active 1, cnt 0 | PC 1 JUMP | active 1, cnt 0 |
+| 3 | NOP 1 (the JUMP at PC 2 waits) | 0 | active 0 | PC 0 MOV | active 1, cnt 0 |
+| 4 | PC 3 EXIT | 0 | active 0 | PC 1 JUMP | active 0 |
+| 5 | PC 0 MOV | 0 | active 0 | PC 2 JUMP | active 1, cnt 4294967295 |
+
+  ANEMOS column == anemos_ctrl.out case E, 5 commands: True
+
+Case 10: `NOP 3`, then MOV, with a triggering command every 2nd cycle
+  bankside: the MOV issues on the 4th command ([TOP-ISA-12])
+  ANEMOS run: the MOV decodes on command 3: ['PC 0 NOP', '(NOP slot)', 'PC 1 MOV']
 
 ok   all cases match the spec

@@ -10,9 +10,31 @@ ok   3 opcode and operand-code tables == yaml; reserved sets match
        MAC, MAD source pairs == MUL's: 16 [TOP-ISA-22]
        MAD src2 in every legal combination: SRF_A [TOP-ISA-23]
 ok   4 legal-combination counts from the yaml == guide table
-       0x41000000  MOV GRF_A[0], EVEN_BANK
-       0x10000802  JUMP -1, 2
-       0x20000000  EXIT
+       0x41000000  PC 0  MOV GRF_A[0], EVEN_BANK
+       0x43000000  PC 1  MOV GRF_B[0], EVEN_BANK  (illegal, as marked)
+       0x00000800  PC 2  NOP 1
+       0x48000000  PC 3  MOV EVEN_BANK, GRF_A[0]
+       0x20000000  PC 4  EXIT
+       0x41000000  PC 0  MOV GRF_A[0], EVEN_BANK
+       0x10000802  PC 1  JUMP -1, 2
+       0x20000000  PC 2  EXIT
+       0x41000000  PC 0  MOV GRF_A[0], EVEN_BANK
+       0x10000003  PC 1  JUMP -0, 3  (illegal, as marked)
+       0x20000000  PC 2  EXIT
+       0x41000000  PC 0  MOV GRF_A[0], EVEN_BANK
+       0x43400000  PC 1  MOV GRF_B[0], ODD_BANK
+       0x10002801  PC 2  JUMP -5, 1  (illegal, as marked)
+       0x20000000  PC 3  EXIT
+       0x41000000  PC 0  MOV GRF_A[0], EVEN_BANK
+       0x43400000  PC 1  MOV GRF_B[0], ODD_BANK
+       0x10000801  PC 2  JUMP -1, 1
+       0x41000100  PC 3  MOV GRF_A[1], EVEN_BANK
+       0x10002001  PC 4  JUMP -4, 1
+       0x20000000  PC 5  EXIT
+       0x41000000  PC 0  MOV GRF_A[0], EVEN_BANK
+       0x10000801  PC 1  JUMP -1, 1
+       0x10001000  PC 2  JUMP -2, 0
+       0x20000000  PC 3  EXIT
        0x00001000  NOP 2
        0x10001807  JUMP -3, 7
        0x20000000  EXIT
@@ -47,17 +69,30 @@ ok   4 legal-combination counts from the yaml == guide table
        0xB2000012  MAC GRF_B[0], GRF_A[1], GRF_A[2]: legal
        0xB2480012  MAC GRF_B[0], GRF_B[1], GRF_B[2]: legal
        0xA0030012  MAD GRF_A[0], GRF_A[1], GRF_A[2], SRF_A[2]: legal
+       0x43000000  MOV GRF_B[0], EVEN_BANK: illegal (guide table)
+       0xB0200010  MAC GRF_A[0], GRF_A[1], EVEN_BANK: illegal (guide table)
+       0x81280000  ADD GRF_A[0], EVEN_BANK, ODD_BANK: illegal (guide table)
+       0x44000210  MOV SRF_M[2], GRF_A[1]: legal (guide table)
+       0x44001210  MOV(RELU) SRF_M[2], GRF_A[1]: legal (guide table)
+       0x42801000  MOV(RELU) GRF_B[0], SRF_M[0]: legal (guide table)
+       0x48001010  MOV(RELU) EVEN_BANK, GRF_A[1]: legal (guide table)
        0xA1530002  MAD GRF_A[0], ODD_BANK, SRF_M[2], SRF_A[2]: legal (guide table)
        0xA0630015  MAD GRF_A[0], GRF_B[1], EVEN_BANK, SRF_A[5]: legal (guide table)
        0xA1110002  MAD GRF_A[0], EVEN_BANK, SRF_M[2], GRF_B[2]: illegal (guide table)
        0xA30B0103  MAD GRF_B[1], EVEN_BANK, GRF_B[3], SRF_A[3]: legal (guide table)
        0xB2000012  MAC GRF_B[0], GRF_A[1], GRF_A[2] (guide prose)
-ok   5 30 example lines assemble, decode back and are legal
+       JUMP -0 at PC 1, -5 at PC 2, -1 at PC 0: illegal; -3 at PC 3, -31 at PC 31: legal [TOP-ISA-26]
+ok   5 52 example lines assemble and decode back; 49 legal, 3 illegal as marked
+       MUL GRF_B[3], GRF_A[1], SRF_M[4]: ANEMOS 0x92100C24 (run), bankside 0x92100314
+       MOV(RELU) GRF_A[3], EVEN_BANK: ANEMOS 0x41008C00 (run), bankside 0x41001300
+       JUMP -3, 7: ANEMOS 0x10001807 (run), bankside 0x10001807
+ok   8 ANEMOS layout table == opcodes.h (anemos_ctrl.out) and yaml; 3 translated words
        ARCH [1, 2, 3, 4, 5, 6, 7, 8]
        FP   [1, 2, 3, 4, 5, 6, 7, 8, 9]
        HAZ  [1, 2, 3, 4, 5, 6]
-       IF   [1, 2, 3, 4, 5, 6, 7]
-       ISA  [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23]
+       HIER [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+       IF   [1, 2, 3, 4, 5, 6, 7, 8]
+       ISA  [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30]
        PIPE [1, 2, 3]
-ok   6 56 IDs, each defined once; all references defined
-ok   7 36 relative links resolve
+ok   6 74 IDs, each defined once; all references defined
+ok   7 88 relative links resolve

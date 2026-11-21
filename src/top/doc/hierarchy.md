@@ -148,8 +148,8 @@ The glue that `top` itself contains:
   operand code, the write port takes `cfg_wr_idx` and the low bits of
   `cfg_wr_data` (256, 256, 16, 16 bits); otherwise it takes `dp`'s S5 write
   for that file. `crf` is written only from `cfg_*`, when `cfg_wr_sel` = 7,
-  with `cfg_wr_data[31:0]`. [TOP-IF-6] keeps a configuration write and an S5
-  write from meeting. **[bankside]** What a select or index outside the
+  with `cfg_wr_data[31:0]`. A configuration write counts only while `busy`
+  = 0 and `trig_valid` = 0 ([TOP-IF-8]), so it never meets an S5 write. **[bankside]** What a select or index outside the
   defined values does is #15.
 - **[TOP-HIER-7]** **Debug read.** Every instance's debug read port takes its
   index from `dbg_rd_idx`; `dbg_rd_sel` chooses which instance drives
@@ -283,9 +283,9 @@ timing; the rules it carries out are cited by their `TOP-` IDs, not copied.
 | `fp16_mul` | Ports (two FP16 operands, one result), combinational ([TOP-HIER-3]); × under [TOP-FP-1], [TOP-FP-2], [TOP-FP-4] to [TOP-FP-7]; worked cases for subnormals, overflow, ties and NaN | #7 (NaN result) |
 | `fp16_add` | As `fp16_mul`, for +, including the signs of zero results ([TOP-FP-5]); the timing budget: one clock period, since it sits in the bypass loop | #7 |
 | `pcu_regfile` | Parameters (depth, width, read ports, and write-through per port if #15 needs it); ports; combinational read, write-through, write at the edge, no reset; what a read of a never-written entry gives in simulation | #8, #15 |
-| `pcu_decode` | Input word; the decoded instruction (fields, operand selects, indices, R, the stages used, slot count, IMM0/IMM1) and the illegal flag, for every opcode, from the yaml ([TOP-ISA-1], [TOP-ISA-2], [TOP-ISA-9], [TOP-ISA-10], [TOP-ISA-15] to [TOP-ISA-21]) | #6 (merged), #9, #19 |
-| `pcu_ctrl` | Ports (trigger, fetch, bank read request, issue, `busy`, `err_illegal`); S1 timing; PC, loop state, NOP counter ([TOP-ISA-3] to [TOP-ISA-8], [TOP-ISA-12], [TOP-ISA-13]); the zero-slot JUMP fetch and the CRF's read ports; the issue bundle (the S1/S2 register); reset ([TOP-IF-4]) | #9, #24, #27 |
-| `pcu_datapath` | Ports (issue, `bank_rd_data`, the S2 and S4 read ports, the S5 write, `bank_wr_*`, `busy`); S2 to S5 timing; source selection, SRF broadcast ([TOP-ISA-11]), ReLU ([TOP-FP-8]), MOV GRF → SRF lane, the MAC accumulator read ([TOP-HIER-5]), bank stores ([TOP-ARCH-8], [TOP-IF-3]); lane naming | #7, #8, #9, #10 |
+| `pcu_decode` | Input word; the decoded instruction (fields, operand selects, indices, R, the stages used, slot count, IMM0/IMM1) and the illegal flag, for every opcode, from the yaml ([TOP-ISA-1], [TOP-ISA-2], [TOP-ISA-9], [TOP-ISA-10], [TOP-ISA-15] to [TOP-ISA-21], [TOP-ISA-24], [TOP-ISA-25]). The JUMP IMM0 check ([TOP-ISA-26]) needs the PC, so `pcu_ctrl` adds it | #6 (merged), #9, #19 |
+| `pcu_ctrl` | Ports (trigger, fetch, bank read request, issue, `busy`, `err_illegal`); S1 timing; PC, loop state, NOP counter ([TOP-ISA-3] to [TOP-ISA-8], [TOP-ISA-12], [TOP-ISA-13], [TOP-ISA-26] to [TOP-ISA-28]); `err_illegal` ([TOP-ISA-24]); the zero-slot JUMP fetch and the CRF's read ports; the issue bundle (the S1/S2 register); reset ([TOP-IF-4]) | #9, #24, #27 |
+| `pcu_datapath` | Ports (issue, `bank_rd_data`, the S2 and S4 read ports, the S5 write, `bank_wr_*`, `busy`); S2 to S5 timing; source selection, SRF broadcast ([TOP-ISA-11]), ReLU ([TOP-FP-8], [TOP-ISA-30]), MOV GRF → SRF lane ([TOP-ISA-29]), the MAC accumulator read ([TOP-HIER-5]), bank stores ([TOP-ARCH-8], [TOP-IF-3]); lane naming (lane numbers: [TOP-ISA-29]) | #7, #8, #9, #10 |
 | `common` | A pointer to the docs its package implements ([TOP-HIER-9]); no rules of its own | – |
 
 `pcu_ctrl` must exist before `pcu_decode` is created, and `pcu_datapath`
