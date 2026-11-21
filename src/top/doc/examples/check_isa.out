@@ -7,6 +7,8 @@ ok   3 opcode and operand-code tables == yaml; reserved sets match
        MAD  yaml  32  guide 32
        MOV  yaml  20  guide 20
        FILL yaml   4  guide 4
+       MAC, MAD source pairs == MUL's: 16 [TOP-ISA-22]
+       MAD src2 in every legal combination: SRF_A [TOP-ISA-23]
 ok   4 legal-combination counts from the yaml == guide table
        0x41000000  MOV GRF_A[0], EVEN_BANK
        0x10000802  JUMP -1, 2
@@ -41,12 +43,21 @@ ok   4 legal-combination counts from the yaml == guide table
        0xA0630015  MAD GRF_A[0], GRF_B[1], EVEN_BANK, SRF_A[5]  (SRC1# = 5)
        rejected  MAD GRF_A[0], GRF_B[1], SRF_M[2], SRF_A[3]  (j != SRC1#)
        0x811F0200  ADD GRF_A[2], EVEN_BANK, SRF_A[0] with SRC2 = 7: legal
+       MAD ... SRF_M[2], <SRC2 = 0..7>: legal only for 3 (SRF_A)
+       0xB2000012  MAC GRF_B[0], GRF_A[1], GRF_A[2]: legal
+       0xB2480012  MAC GRF_B[0], GRF_B[1], GRF_B[2]: legal
+       0xA0030012  MAD GRF_A[0], GRF_A[1], GRF_A[2], SRF_A[2]: legal
+       0xA1530002  MAD GRF_A[0], ODD_BANK, SRF_M[2], SRF_A[2]: legal (guide table)
+       0xA0630015  MAD GRF_A[0], GRF_B[1], EVEN_BANK, SRF_A[5]: legal (guide table)
+       0xA1110002  MAD GRF_A[0], EVEN_BANK, SRF_M[2], GRF_B[2]: illegal (guide table)
+       0xA30B0103  MAD GRF_B[1], EVEN_BANK, GRF_B[3], SRF_A[3]: legal (guide table)
+       0xB2000012  MAC GRF_B[0], GRF_A[1], GRF_A[2] (guide prose)
 ok   5 30 example lines assemble, decode back and are legal
        ARCH [1, 2, 3, 4, 5, 6, 7, 8]
        FP   [1, 2, 3, 4, 5, 6, 7, 8]
        HAZ  [1, 2, 3, 4, 5, 6]
        IF   [1, 2, 3, 4, 5, 6, 7]
-       ISA  [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21]
+       ISA  [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23]
        PIPE [1, 2, 3]
-ok   6 53 IDs, each defined once; all references defined
-ok   7 19 relative links resolve
+ok   6 55 IDs, each defined once; all references defined
+ok   7 28 relative links resolve

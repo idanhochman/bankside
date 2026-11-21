@@ -1,0 +1,47 @@
+1. Table II under GRF = {GRF_A, GRF_B}, BANK = {EVEN_BANK, ODD_BANK}, at most one bank operand [TOP-ARCH-7]
+   MUL: 16 source pairs x 2 DST = 32   paper 32
+   ADD: 20 source pairs x 2 DST = 40   paper 40
+   MAC: 16 source pairs x 1 DST = 16   paper 14   <- 2 more
+   MAD: 16 source pairs x 2 DST = 32   paper 28   <- 4 more
+   paper total for computations: 32 + 40 + 14 + 28 = 114 (Section III-C says 114)
+   Without the one-bank rule MUL would be 40, so the rule is in the paper's count.
+
+2. MAC/MAD source pairs that a published kernel or example uses
+   (EVEN_BANK, GRF_A)       paper Fig. 7: MAC(AAM) GRF_A, EVENBANK, GRF_A
+   (GRF_A, GRF_B)           paper Sec. IV-B: MAD GRF_B[0], GRF_A[0], GRF_B[1]
+   (GRF_A, EVEN_BANK)       ANEMOS map_dp: MAC GRFB7 GRFAi EVEN_BANK
+   (GRF_B, ODD_BANK)        ANEMOS map_dp: MAC GRFB7 GRFBi ODD_BANK
+   (EVEN_BANK, SRF_M)       ANEMOS map_conv: MAC/MAD GRFB0 EVEN_BANK SRFM
+   (ODD_BANK, SRF_M)        ANEMOS map_conv: MAC GRFB0 ODD_BANK SRFM
+   (The paper's Fig. 5 and Sec. III-C also use BANK x GRF_A and BANK x SRF_M
+    without naming the bank; they are covered by the lines above.)
+
+3. Ways to drop 2 of the 16 pairs, keeping every used pair: C(10, 2) = 45
+   Any of them reproduces 14 and 28, so the counts don't identify the pairs.
+
+4. Options for the MAC/MAD source pairs
+   A (ANEMOS's decoder, minus two banks): 16 pairs -> MAC 16, MAD 32
+   B (drop same-file GRF pairs):          14 pairs -> MAC 14, MAD 28
+   A - B = [('GRF_A', 'GRF_A'), ('GRF_B', 'GRF_B')]
+   Where they differ: MAC GRF_B[0], GRF_A[1], GRF_A[2]
+     A and ANEMOS: GRF_B[0] <- round(GRF_B[0] + round(GRF_A[1] x GRF_A[2]))
+     B:            illegal [TOP-ISA-2]: one-slot NOP, err_illegal <- 1, GRF_B[0] unchanged
+   No published kernel uses either pair, so neither option breaks one.
+   B is 1 of the 45 sets in 3: matching the count doesn't make it the paper's set.
+   MUL accepts both pairs (its 32 needs all 16), and a MAC or MAD reads its two
+   sources in S2 exactly like a MUL, so B saves no read port.
+
+5. MAD SRC2 (the addend)
+   paper Table II: SRF_A only       -> MAD 32
+   ANEMOS decoder: GRF_A, GRF_B, SRF_A, EVEN_BANK, ODD_BANK (indexed by SRC1#), at most one bank -> MAD 120
+   Where they differ: MAD GRF_A[0], EVEN_BANK, SRF_M[2], GRF_B[2]
+     ANEMOS:   GRF_A[0] <- round(round(bank x SRF_M[2]) + GRF_B[2])
+     bankside: illegal [TOP-ISA-23]: one-slot NOP, err_illegal <- 1
+   No ANEMOS kernel uses an addend other than SRF_A (map_conv: MAD ... SRFM0 SRFA0).
+
+6. bankside_isa.yaml
+   MUL: 16 source pairs, dst ['GRF_A', 'GRF_B']: option A
+   MAC: 16 source pairs, dst ['GRF_B']: option A
+   MAD: 16 source pairs, src2 ['SRF_A'], dst ['GRF_A', 'GRF_B']: option A
+   MAD src2 = ['SRF_A']: SRF_A only
+ok

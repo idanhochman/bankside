@@ -8,9 +8,10 @@
 #
 # Requirement IDs in comments ([TOP-...]) point to the prose rule.
 #
-# Sources: field layout from ISCA 2021 Table III (Lee et al.); opcode and
-# operand-source values from ANEMOS (github.com/gem5-X/cnm_framework, BSD-3);
-# everything else is bankside's own.
+# Sources: field layout from ISCA 2021 Table III (Lee et al.; checked against
+# the paper by examples/paper_table3.py); opcode and operand-source values from
+# ANEMOS (github.com/gem5-X/cnm_framework, BSD-3); everything else is
+# bankside's own.
 
 version: 0.1-draft
 
@@ -139,6 +140,10 @@ instructions:
     # dst = round(round(src0 * src1) + SRF_A[src1_idx]) [TOP-ISA-19]
     # The SRF_A index is the src1_idx field, even when src1 is a bank
     # [TOP-ISA-20].
+    # src0 x src1: the same 16 pairs as MUL [TOP-ISA-22]; the paper's Table II
+    # counts 28 (14 pairs) without naming the two it drops.
+    # src2 must hold SRF_A; any other code is illegal [TOP-ISA-23]. (ANEMOS
+    # also accepts GRF_A, GRF_B, EVEN_BANK, ODD_BANK there.)
     src2_idx: src1_idx
     legal:
       - src0: [GRF_A, GRF_B, EVEN_BANK, ODD_BANK]
@@ -152,6 +157,8 @@ instructions:
     slots: 1
     stages: [MULT, ADD]
     # GRF_B[dst_idx] = round(GRF_B[dst_idx] + round(src0 * src1)) [TOP-ISA-21]
+    # src0 x src1: the same 16 pairs as MUL [TOP-ISA-22]; the paper's Table II
+    # counts 14 without naming the two it drops.
     src2: ignored
     legal:
       - src0: [GRF_A, GRF_B, EVEN_BANK, ODD_BANK]

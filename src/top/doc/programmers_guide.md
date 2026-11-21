@@ -35,6 +35,15 @@ its register indices are 5 bits wide, at 14–10, 9–5 and 4–0. bankside foll
 the paper's Table III. ANEMOS kernels are translated before they run on
 bankside ([verification](../dv/README.md)).
 
+**Checked against the paper.** [examples/paper_table3.py](examples/paper_table3.py)
+reads Table III's cell borders and labels out of the paper's PDF and maps each
+field onto the bit columns. Every field of all three formats matches the yaml
+and the table above, including R at bit 12, A at bit 15 and the 3-bit DST#,
+SRC0#, SRC1# at 10–8, 6–4, 2–0 ([output](examples/paper_table3.out)). The one
+difference: the paper labels bits 2–0 of the data format SRC1#. MOV and FILL
+have no SRC1, so bankside leaves those bits unused ([TOP-ISA-1]); the hardware
+ignores them either way. **[paper]**, **[bankside]** (unused).
+
 ## Opcodes and operand codes
 
 **[ANEMOS]** for the values.
@@ -204,39 +213,125 @@ the even/odd pairing, GRF → SRF uses lane 0).
 
 - **[TOP-ISA-19]** `MAD dst, src0, src1, SRF_A[j]`:
   dst ← round(round(src0 × src1) + SRF_A[j]) ([TOP-FP-3]). **[paper]**
-  - Operands as for MUL. SRC2 is always SRF_A: the SRC2 field must hold the
-    SRF_A code (3); anything else is illegal ([TOP-ISA-2]).
+  - (src0, src1) is one of the 16 pairs of [TOP-ISA-22]; dst ∈ {GRF_A, GRF_B}.
+- **[TOP-ISA-23]** The addend is always SRF_A: the SRC2 field must hold the
+  SRF_A code (3). Any other value (GRF_A, GRF_B, SRF_M, EVEN_BANK, ODD_BANK
+  or a reserved code) makes the MAD illegal ([TOP-ISA-2]). **[paper]**
+  (Table II lists only SRF_A for SRC2), **[bankside]** (other values are
+  illegal rather than ignored, so that a MAD never adds something other
+  than what its SRC2 field names).
+  ANEMOS's decoder also accepts GRF_A, GRF_B, EVEN_BANK and ODD_BANK in SRC2
+  and routes them to the adder, indexed by SRC1#. bankside doesn't follow
+  it: the paper comes first. No ANEMOS kernel uses that: its convolution
+  kernels write `MAD GRFB0 EVEN_BANK SRFM0 SRFA0`.
 - **[TOP-ISA-20]** The addend's index *j* is always the SRC1# field, whatever
-  src1 is. **[ANEMOS]** (its decoder indexes the SRC2 operand with `SRC1_N`),
-  **[bankside]** (the assembler rule below).
-  - If src1 is a GRF or SRF_M entry, SRC1# is also src1's index, so *j* must
-    equal it: the assembler rejects `MAD d, a, SRF_M[2], SRF_A[3]`.
+  src1 is. There is no SRC2# field. **[paper]** (Section III-C: SRC1# and
+  SRC2# "point to the same register index but in different register files
+  (e.g., SRF_M and SRF_A, respectively)"; Table III has no SRC2# field),
+  **[ANEMOS]** (its decoder indexes the SRC2 operand with `SRC1_N`, also when
+  src1 is a bank, which the paper doesn't cover), **[bankside]** (the
+  assembler rules below).
+  - If src1 is a GRF or SRF_M entry, SRC1# is also src1's index, so *j* is
+    the same number: `MAD d, a, SRF_M[k], SRF_A[k]`. The assembler rejects
+    `MAD d, a, SRF_M[2], SRF_A[3]`.
   - If src1 is a bank, SRC1# selects nothing for src1 ([TOP-ISA-9]) and holds
     *j* alone: `MAD GRF_A[0], GRF_B[1], EVEN_BANK, SRF_A[5]` has SRC1# = 5.
+  - The hardware reads SRF_A[SRC1#] for every legal MAD and doesn't look at
+    the kind of src1 to do so.
+
+**Worked cases.** Encoded by [examples/check_isa.py](examples/check_isa.py),
+which checks each word against this table.
+
+| Instruction | Word | bankside | ANEMOS |
+|---|---|---|---|
+| `MAD GRF_A[0], ODD_BANK, SRF_M[2], SRF_A[2]` | `0xA1530002` | GRF_A[0] ← round(round(bank × SRF_M[2]) + SRF_A[2]) | same |
+| `MAD GRF_A[0], GRF_B[1], EVEN_BANK, SRF_A[5]` | `0xA0630015` | GRF_A[0] ← round(round(GRF_B[1] × bank) + SRF_A[5]); SRC1# = 5 | same |
+| `MAD GRF_A[0], EVEN_BANK, SRF_M[2], GRF_B[2]` | `0xA1110002` | illegal ([TOP-ISA-23]): one-slot NOP, `err_illegal` ← 1 | GRF_A[0] ← round(round(bank × SRF_M[2]) + GRF_B[2]) |
+| `MAD GRF_B[1], EVEN_BANK, GRF_B[3], SRF_A[3]` | `0xA30B0103` | GRF_B[1] ← round(round(bank × GRF_B[3]) + SRF_A[3]) | reads the wrong GRF_B entry, see below |
+
+The last row is legal in both, but ANEMOS computes something else: for a MAD
+with a bank src0 and src1 = GRF_B, its decoder writes SRC1# into GRF_A's
+second read address instead of GRF_B's (`src/instr_decoder.cpp`, the
+`OP_MAD` bank branch, at commit `f2d4018`; read, not run), so GRF_B is read
+at a stale index. That is an ANEMOS bug, not a bankside rule; comparisons
+against ANEMOS must leave this combination out.
 
 ### MAC
 
 - **[TOP-ISA-21]** `MAC GRF_B[i], src0, src1`:
   GRF_B[i] ← round(GRF_B[i] + round(src0 × src1)) ([TOP-FP-3]), with *i* =
   DST#. **[paper]** (Table II; GRF_B is the only destination).
-  - src0, src1 as for MUL; dst is GRF_B only. The SRC2 field is ignored
-    ([TOP-ISA-10]).
+  - (src0, src1) is one of the 16 pairs of [TOP-ISA-22]; dst is GRF_B only.
+    The SRC2 field is ignored ([TOP-ISA-10]).
 - The accumulator is read late, in S4, with a bypass ([TOP-HAZ-2]). A MAC may
   follow the previous write of its GRF_B entry immediately ([TOP-HAZ-4]).
 - The paper's Fig. 7 and the Hot Chips slides show `MAC GRF_A, …`, which
   contradicts Table II and the text. bankside treats the figure as an erratum.
+- The paper's Section III-C describes MAC's SRC2 as GRF_B: "SRC2 (GRF_B)
+  points to the same GRF register as DST". bankside ignores the field instead
+  ([TOP-ISA-10], **[ANEMOS]**). Whether to follow the paper here is open in
+  [issue #19](https://github.com/idanhochman/bankside/issues/19); until it is
+  settled, tests must not depend on MAC's SRC2 value.
 
 ### Legal combinations compared with the paper
 
 The bankside counts are computed from the yaml `legal` lists by
 [examples/check_isa.py](examples/check_isa.py).
 
+- **[TOP-ISA-22]** MAC and MAD accept the same 16 (src0, src1) source pairs as
+  MUL: src0 ∈ {GRF_A, GRF_B, EVEN_BANK, ODD_BANK}, src1 ∈ {GRF_A, GRF_B,
+  EVEN_BANK, ODD_BANK, SRF_M}, at most one of them a bank ([TOP-ARCH-7]).
+  Any other pair is illegal ([TOP-ISA-2]). **[ANEMOS]** (its decoder has a
+  datapath route for each of these pairs), against the **[paper]**'s count:
+  Table II gives MAC 14 and MAD 28, two source pairs fewer, without saying
+  which two.
+
+| src0 \ src1 | GRF_A | GRF_B | EVEN_BANK | ODD_BANK | SRF_M |
+|---|---|---|---|---|---|
+| GRF_A | legal | legal (a) | legal (c) | legal | legal |
+| GRF_B | legal | legal | legal | legal (c) | legal |
+| EVEN_BANK | legal (b) | legal | – | – | legal (d) |
+| ODD_BANK | legal | legal | – | – | legal (d) |
+
+Pairs a published example or kernel uses: (a) the paper's Section IV-B,
+`MAD GRF_B[0], GRF_A[0], GRF_B[1]` (printed without its SRF_A operand); (b) the paper's Fig. 7,
+`MAC(AAM) GRF_A, EVENBANK, GRF_A`; (c) ANEMOS's dot-product kernels
+(`map_dp.cpp`); (d) ANEMOS's convolution kernels (`map_conv.cpp`), MAC and
+MAD. The paper's Fig. 5 and Section III-C also multiply a bank by GRF_A and by
+SRF_M without naming the bank.
+
+**Why all 16.** Read with GRF = {GRF_A, GRF_B} and BANK = {EVEN_BANK,
+ODD_BANK} and at most one bank operand, Table II gives MUL 16 pairs × 2
+destinations = 32 and ADD 20 × 2 = 40, as printed, and the four rows add up
+to the 114 operand combinations the paper's text states. The same reading
+gives MAC 16 and MAD 32, so the paper drops two pairs from MAC and MAD that
+it keeps for MUL. Its text doesn't say which. 45 different choices of two
+pairs reproduce 14 and 28 without dropping a pair from the list above
+([examples/mac_mad_pairs.py](examples/mac_mad_pairs.py),
+[output](examples/mac_mad_pairs.out)), so the count can't settle it. With the
+paper silent, ANEMOS breaks the tie, and its decoder accepts all 16. (It
+doesn't reject two bank operands either; [TOP-ARCH-7], from the paper's MUL
+and ADD counts, keeps those out.) The
+superset also means no program the paper's hardware runs is illegal on
+bankside; the cost is that bankside runs up to two pairs the paper's hardware
+may reject.
+
+The option weighed against it: drop the same-file pairs (GRF_A, GRF_A) and
+(GRF_B, GRF_B), which gives exactly 14 and 28. Nothing in the paper points to
+those two. MUL keeps both (its 32 needs all 16), and a MAC or MAD reads its
+two sources in S2 exactly like a MUL, so dropping them saves no read port
+([register files](theory_of_operation.md#register-files)). The two options
+differ on, for example, `MAC GRF_B[0], GRF_A[1], GRF_A[2]` (`0xB2000012`):
+with all 16 pairs (and in ANEMOS) GRF_B[0] ← round(GRF_B[0] +
+round(GRF_A[1] × GRF_A[2])); with 14 it would be illegal, a one-slot NOP that
+sets `err_illegal` and leaves GRF_B[0] unchanged.
+
 | Op | bankside | Paper (Table II) | Note |
 |---|---|---|---|
 | MUL | 32 | 32 | |
 | ADD | 40 | 40 | |
-| MAC | 16 | 14 | The paper excludes two more source pairs, but doesn't say which. bankside allows them. |
-| MAD | 32 | 28 | Same two pairs, × 2 destinations. |
+| MAC | 16 | 14 | 16 source pairs × GRF_B ([TOP-ISA-22]). The paper excludes two more pairs without saying which; bankside allows them (ANEMOS). |
+| MAD | 32 | 28 | The same 16 pairs × 2 destinations, SRC2 = SRF_A only ([TOP-ISA-23]). |
 | MOV | 20 pairs (× ReLU on/off) | 24 | bankside adds SRF and bank stores (ANEMOS), the paper counts GRF/bank → GRF |
 | FILL | 4 | 12 (Hot Chips) | Restricted to bank ↔ GRF |
 
