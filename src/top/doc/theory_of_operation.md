@@ -147,25 +147,141 @@ FP16 adder, so the adder must fit in one clock period.
 - **[TOP-FP-5]** Special cases follow IEEE 754: 0 × ±Inf = NaN, Inf − Inf = NaN,
   any NaN input gives a NaN result, x + (−x) = +0, (−0) + (−0) = −0, and the
   sign of a product is the XOR of the operand signs. **[bankside]**
-- **[TOP-FP-6]** Every NaN result is the **canonical quiet NaN 0x7E00**. Payloads
-  and signs of NaN inputs are not propagated. **[bankside]**
+- **[TOP-FP-6]** Every NaN that MUL, ADD, MAC or MAD produces is the
+  **canonical quiet NaN 0x7E00** (sign 0, exponent all ones, significand
+  `10 0000 0000`). This holds whatever made the result a NaN: a NaN operand of
+  either sign, quiet or signalling, with any payload, or an invalid operation
+  (0 × ±Inf, Inf − Inf). The payloads and signs of NaN operands are not
+  propagated. In MAC and MAD it holds at each of the two roundings of
+  [TOP-FP-3]: a NaN product is 0x7E00, and so is the sum it then feeds.
+  **[bankside]**. The papers say nothing about NaNs. ANEMOS doesn't settle
+  them either; it inherits them from its FP16 library (see
+  [NaN results compared](#nan-results-compared) for why it isn't followed as
+  the tiebreaker). Data movement keeps NaNs as they are ([TOP-FP-9]).
 - **[TOP-FP-7]** No exception flags are kept. **[bankside]**
 
 **Reference.** NumPy's `float16` arithmetic is correctly rounded for `+` and
 `×`. NumPy computes in float32 and rounds once more to FP16, and that double
 rounding is harmless because float32's 24-bit significand is at least
-2 × 11 + 2 bits. So NumPy is a valid oracle, except for NaN bit patterns
-([TOP-FP-6]); NaNs are compared as a class.
+2 × 11 + 2 bits. So NumPy is a valid oracle, except for NaN bit patterns:
+NumPy's NaN bits come from the host's floating-point unit and differ from
+[TOP-FP-6] (see the NumPy column below), so NumPy can only tell that a result
+is a NaN. The bit pattern of a NaN result is fixed by [TOP-FP-6] alone.
+
+### NaN results compared
+
+The cases below are each FP16 operation on the bits shown (`a + b` or
+`a × b`, with *a* first). The bankside column is [TOP-FP-6]. The ANEMOS
+column is the `half` library that its SystemC model computes with (half 2.2.0,
+`src/half.hpp` at ANEMOS commit `f2d4018`), compiled and run. The NumPy column
+is NumPy 2.5.1 `float16` on x86-64, run. Both alternatives propagate an input
+NaN, as IEEE 754-2019 recommends:
+
+| Operation | Case | bankside ([TOP-FP-6]) | ANEMOS (half 2.2.0) | NumPy 2.5.1, x86-64 |
+|---|---|---|---|---|
+| ADD 0x7C00, 0xFC00 | Inf − Inf (invalid) | 0x7E00 | 0x7FFF | 0xFE00 |
+| MUL 0x0000, 0x7C00 | 0 × Inf (invalid) | 0x7E00 | 0x7FFF | 0xFE00 |
+| ADD 0xFE00, 0x3C00 | negative quiet NaN + 1 | 0x7E00 | 0xFE00 | 0xFE00 |
+| MUL 0x7C01, 0x3C00 | signalling NaN × 1 | 0x7E00 | 0x7E01 | 0x7E01 |
+| ADD 0x7E01, 0xFE02 | two NaNs | 0x7E00 | 0x7E01 | 0xFE02 |
+| ADD 0xFE02, 0x7E01 | the same, swapped | 0x7E00 | 0xFE02 | 0x7E01 |
+| ADD 0x3C00, 0xFE02 | NaN second | 0x7E00 | 0xFE02 | 0xFE02 |
+
+What the cases show:
+
+- The two propagating references disagree with each other on 4 of the 7
+  cases. For an invalid operation half returns 0x7FFF and x86 returns its
+  negative default NaN (0xFE00). With two NaN operands half keeps the first and
+  x86 NumPy the second. So propagation would not give bankside a bit-exact
+  oracle either: a NaN would still be compared as a class against one of them.
+- Under propagation the result of an instruction with two NaN operands
+  depends on which operand reaches which adder or multiplier input. The bankside
+  spec doesn't otherwise fix that order (ADD and MUL are commutative), and it
+  would have to for MAC's accumulator and MAD's addend too. With [TOP-FP-6] the
+  order never shows.
+- A canonical NaN is one constant on the unit's output multiplexer.
+  Propagation needs a NaN detector on each operand, a 16-bit selection between
+  the operands and a forced quiet bit, per lane, in each of the 32 FP16 units.
+  Both are small; the canonical NaN is the smaller.
+- IEEE 754-2019 recommends ("should") but does not require that a NaN result
+  carry an input NaN's payload, and it doesn't specify a NaN's sign, so
+  [TOP-FP-6] is conforming ([TOP-FP-1]). RISC-V's F and Zfh extensions make the
+  same choice (the canonical NaN is 0x7E00 in half precision).
+
+Why ANEMOS isn't the tiebreaker here: its NaN bits are not a choice its model
+makes but a property of whichever FP16 library is compiled in. Its SystemC
+model uses half, with the rules in the table (the first NaN operand, quietened;
+0x7FFF for an invalid operation). Its HLS path (`__SYNTHESIS__`) uses
+the AC datatypes' `ac_ieee_float16` instead, whose NaN rule we haven't checked. The
+draft's choice stands: **[bankside]**.
+
+For DV: against ANEMOS ([VER-2]) and NumPy ([VER-4]) a NaN result can only
+be compared as a class, as the verification plan already says. Because
+[TOP-FP-6] fixes the pattern, a NaN result can in addition be checked bit-exact
+against 0x7E00, both in the RTL-versus-model comparison ([VER-1]) and on the
+FP16 units on their own.
 
 ## ReLU
 
-- **[TOP-FP-8]** MOV with R = 1 applies ReLU per lane through a 2:1 multiplexer on
-  the sign bit: if the sign bit is 1 the lane becomes +0 (0x0000), otherwise it
-  passes unchanged. **[paper]** (the sign-bit multiplexer).
+- **[TOP-FP-8]** MOV with R = 1 applies ReLU to each lane by its sign bit
+  (bit 15) alone: if the sign bit is 1 the lane becomes +0 (0x0000), and if it
+  is 0 the lane passes unchanged ([TOP-FP-9]). The exponent and significand are
+  not looked at. **[paper]**: ISCA 2021, Section III-C, implements ReLU as "a
+  2-to-1 multiplexer controlled by the sign bit of a given input value".
 
-  As a result, −0 → +0, and any NaN with the sign bit set → +0. ANEMOS
-  compares the value against zero instead, so on those two inputs bankside
-  **intentionally differs** from ANEMOS. See [verification](../dv/README.md).
+  ANEMOS instead compares the value with zero: `in < 0 ? half_cast<half>(0.0)
+  : in` (`src/grf.cpp`, ANEMOS commit `f2d4018`). That comparison is false for
+  −0 and for every NaN, so ANEMOS passes them through unchanged. The paper
+  states the mechanism, so the paper is followed; the tiebreaker isn't needed.
+  (The same paper paragraph also says ReLU "returns zero if a given input value
+  is a negative number"; −0 and NaNs aren't negative numbers, and the
+  multiplexer sentence is the one that defines what happens to them.) bankside
+  therefore **intentionally differs** from ANEMOS on −0 and on NaNs with the
+  sign bit set, and only there: the two rules differ on 1024 of the 65536 input
+  patterns, 0x8000 and 0xFC01 to 0xFFFF. [VER-2] masks them.
+
+- **[TOP-FP-9]** MOV with R = 0 and FILL copy each lane's 16 bits unchanged,
+  NaNs included: a signalling NaN stays signalling, and a NaN's sign and payload
+  are kept. With R = 1, MOV changes a lane only as [TOP-FP-8] says, so a NaN
+  with the sign bit clear also passes bit for bit. [TOP-FP-6] applies to
+  arithmetic results only. **[bankside]**. ANEMOS also copies the bits (the
+  run below shows 0x7C01 and 0xFC01 kept by its MOV(RELU) path).
+
+### ReLU compared
+
+Each input is one lane of a `MOV(RELU)`. The ANEMOS column is its `grf.cpp`
+expression on the half 2.2.0 type, compiled and run:
+
+| Input | Class | bankside ([TOP-FP-8]) | ANEMOS (value < 0) |
+|---|---|---|---|
+| 0x3C00 | +1 | 0x3C00 | 0x3C00 |
+| 0xBC00 | −1 | 0x0000 | 0x0000 |
+| 0x0000 | +0 | 0x0000 | 0x0000 |
+| 0x8000 | −0 | 0x0000 | 0x8000 |
+| 0x8001 | smallest negative subnormal | 0x0000 | 0x0000 |
+| 0x7C00 | +Inf | 0x7C00 | 0x7C00 |
+| 0xFC00 | −Inf | 0x0000 | 0x0000 |
+| 0x7E00 | positive quiet NaN | 0x7E00 | 0x7E00 |
+| 0x7C01 | positive signalling NaN | 0x7C01 | 0x7C01 |
+| 0xFE00 | negative quiet NaN | 0x0000 | 0xFE00 |
+| 0xFC01 | negative signalling NaN | 0x0000 | 0xFC01 |
+
+Where the options differ in a program: a kernel that loads a column holding
+−0 or a negative NaN with `MOV(RELU) GRF_A[0], EVEN_BANK` and stores it back
+writes 0x0000 in bankside and the input unchanged in ANEMOS. Combined with
+[TOP-FP-6], a NaN that bankside's own arithmetic produces is always 0x7E00,
+whose sign bit is clear, so it survives a later ReLU as a NaN in both models;
+only NaNs with the sign bit set that come from the bank or the host are
+cleared to +0.
+
+A NumPy reference for ReLU (as in [VER-3]) has to use the sign bit too, for
+example `np.where(np.signbit(x), np.float16(0), x)`, which matches
+[TOP-FP-8] on all 65536 patterns. `np.maximum(x, 0)` does not: it returns
+0x8000 for −0 and passes NaNs through.
+
+The cases are checked by [examples/fp_relu_nan.py](examples/fp_relu_nan.py),
+and the ANEMOS and NumPy columns come from runs it compares against
+([examples/README.md](examples/README.md)).
 
 ## Bank access
 

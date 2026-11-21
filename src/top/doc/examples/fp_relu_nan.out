@@ -1,0 +1,8 @@
+ok   ReLU table: 11 rows match the sign-bit and value < 0 models
+ok   NaN table: 7 rows match [TOP-FP-6] and the half 2.2.0 rule
+ok   half 2.2.0 and NumPy (as tabled) differ on 4 of 7 NaN cases, as the spec says
+ok   ReLU rules differ on 1024 of 65536 inputs: 0x8000 and 0xFC01..0xFFFF
+ok   ANEMOS run (anemos_fp.out): 11 ReLU and 7 NaN cases match the ANEMOS columns
+ok   NumPy column matches NumPy 2.5.1, x86_64
+ok   np.where(np.signbit(x), 0, x) == [TOP-FP-8] on all 65536 inputs
+ok   np.maximum(x, 0): -0 -> 0x8000, NaNs stay NaN (1024 inputs differ from [TOP-FP-8])
