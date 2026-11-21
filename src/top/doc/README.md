@@ -38,6 +38,7 @@ by Samsung. It is a clean-room design from public papers.
 | [theory_of_operation.md](theory_of_operation.md) | Architecture, register files, pipeline, hazards, FP16 arithmetic |
 | [programmers_guide.md](programmers_guide.md) | Instruction encoding, instruction reference, programming rules, assembler syntax, examples |
 | [interfaces.md](interfaces.md) | v1 ports and their timing |
+| [hierarchy.md](hierarchy.md) | The v1 modules, their prefixes, and how `top` connects them |
 | [../dv/README.md](../dv/README.md) | Verification requirements |
 | [bankside_isa.yaml](bankside_isa.yaml) | Machine-readable ISA: **the source of truth for the encoding** |
 
@@ -46,8 +47,8 @@ by Samsung. It is a clean-room design from public papers.
 - **Requirement IDs.** Rules that tests check are tagged `[TOP-AREA-n]`, e.g.
   `[TOP-HAZ-2]`. `TOP` is this module's prefix (see
   [../README.md](../README.md)); areas are `ARCH`, `ISA`, `FP`, `PIPE`, `HAZ`,
-  `IF`. Test plans refer to these IDs. IDs are never reused, and their numbers
-  carry no order. Draft 0.1 wrote them without the prefix: its `[HAZ-2]` is
+  `IF`, `HIER`. Test plans refer to these IDs. IDs are never reused, and their
+  numbers carry no order. Draft 0.1 wrote them without the prefix: its `[HAZ-2]` is
   `[TOP-HAZ-2]` here, and the unprefixed forms are retired. An ID is *defined*
   where it is in bold; elsewhere it is a reference.
 - **Source tags.** Every rule is tagged `[paper]` (ISCA 2021 or Hot Chips 33),

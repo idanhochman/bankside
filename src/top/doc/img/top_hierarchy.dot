@@ -1,0 +1,23 @@
+digraph top_hierarchy {
+  graph [rankdir=TB, fontname="Helvetica", fontsize=11, nodesep=0.3, ranksep=0.5,
+         newrank=true, labeljust=l];
+  node  [shape=record, fontname="Helvetica", fontsize=10, height=0.3, margin="0.2,0.08"];
+  edge  [fontname="Helvetica", fontsize=9, arrowsize=0.7];
+
+  top      [label="top\n(top/doc)\nTOP"];
+
+  ctrl     [label="ctrl: pcu_ctrl\n(pcu_ctrl/doc)\nCTRL"];
+  dp       [label="dp: pcu_datapath\n(pcu_datapath/doc)\nDP"];
+  rf       [label="crf, grf_a, grf_b, srf_m, srf_a:\npcu_regfile × 5\n(pcu_regfile/doc)\nRF"];
+
+  dec      [label="dec: pcu_decode\n(pcu_decode/doc)\nDEC"];
+  mul      [label="fp16_mul × 16, one per lane\n(fp16_mul/doc)\nFMUL"];
+  add      [label="fp16_add × 16, one per lane\n(fp16_add/doc)\nFADD"];
+
+  top -> ctrl;
+  top -> dp;
+  top -> rf;
+  ctrl -> dec;
+  dp -> mul;
+  dp -> add;
+}

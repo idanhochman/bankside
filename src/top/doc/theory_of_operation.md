@@ -2,6 +2,8 @@
 
 ## Block diagram
 
+The blocks below are split into modules in [hierarchy.md](hierarchy.md).
+
 ```
             triggering command (one per slot)
                      │
