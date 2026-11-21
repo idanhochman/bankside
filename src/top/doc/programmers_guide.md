@@ -29,12 +29,6 @@ All instructions are 32 bits. **[paper]** (Table III) for the field layout.
   ([TOP-ISA-2]) doesn't depend on SRC2. **[ANEMOS]** (its decoder reads SRC2
   only for MAD), **[bankside]** (reserved codes there are not illegal).
 
-ANEMOS uses the same opcode, DST, SRC0, SRC1, SRC2 and AAM positions but a
-different layout for the rest: its RELU flag is bit 15 (bankside: bit 12) and
-its register indices are 5 bits wide, at 14–10, 9–5 and 4–0. bankside follows
-the paper's Table III. ANEMOS kernels are translated before they run on
-bankside ([verification](../dv/README.md)).
-
 **Checked against the paper.** [examples/paper_table3.py](examples/paper_table3.py)
 reads Table III's cell borders and labels out of the paper's PDF and maps each
 field onto the bit columns. Every field of all three formats matches the yaml
@@ -43,6 +37,53 @@ SRC0#, SRC1# at 10–8, 6–4, 2–0 ([output](examples/paper_table3.out)). The 
 difference: the paper labels bits 2–0 of the data format SRC1#. MOV and FILL
 have no SRC1, so bankside leaves those bits unused ([TOP-ISA-1]); the hardware
 ignores them either way. **[paper]**, **[bankside]** (unused).
+
+### ANEMOS's layout
+
+ANEMOS uses its own layout, not the paper's Table III. bankside follows the
+paper. ANEMOS kernels are translated before they run on bankside
+([verification](../dv/README.md)). This table gives ANEMOS's layout for each
+field next to bankside's. The ANEMOS bits are the `*_STA`/`*_END` macros of
+`src/opcodes.h` at ANEMOS commit `f2d4018`, printed by a run of
+[examples/anemos_ctrl.cpp](examples/anemos_ctrl.cpp) built against that
+header ([output](examples/anemos_ctrl.out)). [examples/check_isa.py](examples/check_isa.py)
+checks the table against that output and against the yaml. **[ANEMOS]**
+
+| Field | Formats | ANEMOS bits | bankside bits | Same? |
+|---|---|---|---|---|
+| OPCODE | all | 31–28 | 31–28 | yes |
+| IMM0 | control | 18–11 | 18–11 | yes |
+| IMM1 | control | 10–0 | 10–0 | yes |
+| DST | data, ALU | 27–25 | 27–25 | yes |
+| SRC0 | data, ALU | 24–22 | 24–22 | yes |
+| SRC1 | ALU | 21–19 | 21–19 | yes |
+| SRC2 | ALU | 18–16 | 18–16 | yes |
+| A (AAM) | ALU | 15 | 15 | yes |
+| R (RELU) | data | 15 | 12 | no |
+| DST# | data, ALU | 14–10 | 10–8 | no: ANEMOS 5 bits, bankside 3 |
+| SRC0# | data, ALU | 9–5 | 6–4 | no: ANEMOS 5 bits, bankside 3 |
+| SRC1# | ALU | 4–0 | 2–0 | no: ANEMOS 5 bits, bankside 3 |
+
+- The three ANEMOS index fields are in the order DST#, SRC0#, SRC1#, from
+  the top: DST# at 14–10, SRC0# at 9–5, SRC1# at 4–0.
+- The control format is the same in both: NOP, JUMP and EXIT words are
+  identical bit for bit.
+- AAM and RELU share bit 15 in ANEMOS (`AAM_BIT` = `RELU_BIT` = 15). The
+  decoder reads RELU only for MOV and AAM only for the ALU instructions, so the
+  two never meet. In bankside, R is bit 12 and A is bit 15.
+- ANEMOS's assembler also writes SRC1# (4–0) into MOV and FILL words, and
+  its decoder ignores it there. bankside leaves 2–0 of the data format unused
+  ([TOP-ISA-1]).
+
+Worked translation. The words come from the same run (ANEMOS builds each field
+as `value << *_END`, as its `build_instr` does) and from
+[examples/check_isa.py](examples/check_isa.py) (bankside):
+
+| Instruction | ANEMOS word | bankside word | What moves |
+|---|---|---|---|
+| `MUL GRF_B[3], GRF_A[1], SRF_M[4]` | 0x92100C24 | 0x92100314 | DST# 3, SRC0# 1, SRC1# 4 move down into the 3-bit fields |
+| `MOV(RELU) GRF_A[3], EVEN_BANK` | 0x41008C00 | 0x41001300 | R from bit 15 to bit 12, DST# from 14–10 to 10–8 |
+| `JUMP -3, 7` | 0x10001807 | 0x10001807 | nothing |
 
 ## Opcodes and operand codes
 
@@ -66,12 +107,76 @@ ignores them either way. **[paper]**, **[bankside]** (unused).
 - **[TOP-ISA-2]** An instruction is illegal if it uses a reserved opcode, a
   reserved operand code, an operand combination not listed for its opcode (the
   `legal` lists in [`bankside_isa.yaml`](bankside_isa.yaml), written out in the
-  instruction reference below), or (in v1) A = 1. An illegal instruction
-  executes as a one-slot NOP and sets the sticky `err_illegal` flag
+  instruction reference below), A = 1 (in v1), or if it is a JUMP whose IMM0
+  is out of range ([TOP-ISA-26]). An illegal instruction executes as a
+  one-slot NOP and sets the sticky `err_illegal` flag
   ([interfaces.md](interfaces.md)). **[bankside]**
+- **[TOP-ISA-24]** "Executes as a one-slot NOP" means exactly this: the
+  illegal instruction takes one slot, like `NOP 1` ([TOP-ISA-12]). It
+  writes no register-file entry and drives no bank access (`bank_rd_en` = 0
+  in its S1 cycle, and nothing in S5). It leaves the loop state
+  ([TOP-ISA-3]) and the NOP counter unchanged, and sets PC ← PC + 1
+  ([TOP-ISA-8]). `err_illegal` is set at the clock edge that ends the
+  illegal instruction's S1 cycle, so it reads 1 from the next cycle on and
+  stays 1 until reset ([TOP-IF-4]). Nothing else in the unit changes: the
+  instructions before it in the pipeline complete, and the next trigger
+  issues the instruction at PC + 1. **[bankside]**
+- **[TOP-ISA-25]** NOP, JUMP and EXIT have no operand fields. NOP ignores
+  IMM1, and EXIT ignores IMM0 and IMM1 (the yaml's `ignored` lists). Their
+  values never make the instruction illegal, and the assembler writes them
+  as 0. So a control instruction is illegal only through its opcode or, for
+  a JUMP, through [TOP-ISA-26]. **[ANEMOS]** (its decoder reads IMM0 only
+  for NOP and JUMP, and IMM1 only for JUMP), **[bankside]** (that they are
+  never illegal).
 
-A field the instruction ignores ([TOP-ISA-1], [TOP-ISA-9], [TOP-ISA-10], R of
-FILL) is not "used", so its value never makes the instruction illegal.
+A field the instruction ignores ([TOP-ISA-1], [TOP-ISA-9], [TOP-ISA-10],
+[TOP-ISA-25], R of FILL) is not "used", so its value never makes the
+instruction illegal.
+
+**Why a NOP and a flag.** The paper doesn't say what an
+illegal word does. ANEMOS has no legality check. Its decoder switches on the
+fields and does nothing for a value it has no case for, and the PC still
+advances. So in ANEMOS a reserved opcode is a one-slot no-op without a flag,
+but an illegal operand combination may partly execute: in a MOV with a
+reserved SRC0 code and a GRF destination, no source is selected, the GRF's
+write multiplexer stays at its default (`MUX_EXT`, the host data bus), and
+the GRF entry is written with whatever is on that bus (`src/instr_decoder.cpp`,
+`OP_MOV`, at `f2d4018`; read, not run). bankside weighed three outcomes:
+
+| Option | What the host and the tests see | Verdict |
+|---|---|---|
+| One-slot NOP and sticky `err_illegal` (chosen) | The program goes on, and the flag says something was wrong. The reference model gives the same state ([VER-1]) | Defined and observable. It costs one flag bit and the decode check that `pcu_decode` already has ([hierarchy](hierarchy.md)) |
+| Halt until reset | The unit can't stall the host ([hazards](theory_of_operation.md#hazards)), so every later command does nothing. A whole run is lost for one bad word, and halting adds a state that `busy` and reset have to cover | Rejected |
+| Ignore silently (NOP, no flag) | The same as the chosen option, but nothing records the error in silicon | Rejected: the flag is nearly free, and tests and the host can read it |
+
+Worked case. The word at PC 1 pairs a crossed bank with a GRF
+([TOP-ISA-15]). Encoded by [examples/check_isa.py](examples/check_isa.py),
+which also checks that the line marked `illegal` is illegal and the others
+are legal:
+
+```
+PC 0  MOV GRF_A[0], EVEN_BANK
+PC 1  MOV GRF_B[0], EVEN_BANK    ; illegal: EVEN_BANK pairs with GRF_A only
+PC 2  NOP 1
+PC 3  MOV EVEN_BANK, GRF_A[0]
+PC 4  EXIT
+```
+
+| Slot | bankside (chosen) | Halt | Ignore silently |
+|---|---|---|---|
+| 1 | PC 0: GRF_A[0] ← bank | same | same |
+| 2 | PC 1: one-slot NOP, `err_illegal` ← 1, GRF_B[0] unchanged, no bank read | stops: nothing more runs until reset | one-slot NOP, no flag |
+| 3 | PC 2: `NOP 1` | – | `NOP 1` |
+| 4 | PC 3: the bank store of GRF_A[0] | – (no store) | the store |
+| 5 | PC 4: EXIT, `err_illegal` still 1 | – | EXIT, nothing flagged |
+
+The same word in an instruction-word table, with two more:
+
+| Instruction | Word | bankside | ANEMOS |
+|---|---|---|---|
+| `MOV GRF_B[0], EVEN_BANK` | `0x43000000` | illegal ([TOP-ISA-15]): one-slot NOP, `err_illegal` ← 1 | no write (its decoder writes GRF_B only from ODD_BANK) |
+| `MAC GRF_A[0], GRF_A[1], EVEN_BANK` | `0xB0200010` | illegal ([TOP-ISA-21]: dst is GRF_B only): one-slot NOP, `err_illegal` ← 1 | computes but writes nothing: its MAC decode enables a write only for a GRF_B destination |
+| `ADD GRF_A[0], EVEN_BANK, ODD_BANK` | `0x81280000` | illegal ([TOP-ARCH-7]: two bank operands): one-slot NOP, `err_illegal` ← 1 | not traced here: VER-2 leaves illegal words out |
 
 ## Instruction reference
 
@@ -100,9 +205,18 @@ index field; arithmetic is per lane, per
 
 - **[TOP-ISA-12]** A NOP occupies IMM0 slots, one per triggering command
   ([TOP-PIPE-3]); IMM0 = 0 occupies one slot, like IMM0 = 1. **[paper]**
-  (multi-cycle NOP), **[ANEMOS]** (IMM0 = slot count), **[bankside]** (0 → 1).
+  (multi-cycle NOP), **[ANEMOS]** (IMM0 is the length), **[bankside]** (0 → 1,
+  and counting triggering commands).
   ANEMOS loads its 8-bit NOP counter with IMM0 − 1, so in ANEMOS `NOP 0`
-  wraps to 255 and lasts 256 slots.
+  wraps to 255 and lasts 256 slots. ANEMOS's counter also counts clock
+  cycles, not commands: it counts down every cycle from the NOP's fetch, and
+  a command that arrives meanwhile is dropped. With one command per cycle
+  the two agree. With fewer, they differ: in the run of
+  [examples/anemos_ctrl.cpp](examples/anemos_ctrl.cpp) (case F, a command
+  every second cycle) the instruction after `NOP 3` decodes on the 3rd
+  command, where bankside issues it on the 4th
+  ([output](examples/anemos_ctrl.out)). bankside counts commands because
+  the unit does nothing without one ([TOP-IF-1]).
 
 ### JUMP
 
@@ -135,8 +249,8 @@ cycles), **[ANEMOS]** (which immediate is which, counting).
   instruction (the target, or PC + 1) is fetched in the same cycle.
   **[paper]**
 - **[TOP-ISA-14]** **Programming rule.** IMM0 must be between 1 and the JUMP's
-  own PC, so that the target PC − IMM0 is between 0 and PC − 1.
-  **[bankside]**
+  own PC, so that the target PC − IMM0 is between 0 and PC − 1. The
+  hardware checks it ([TOP-ISA-26]). **[bankside]**
 
 **Worked case.** The loop state through `JUMP -1, 2` (body runs 3 times),
 one row per slot. Generated by [examples/loop_trace.py](examples/loop_trace.py).
@@ -158,6 +272,164 @@ Two jumps (IMM1 = 2), three MOVs (IMM1 + 1). With `JUMP -1, 0` slot 2 falls
 through to EXIT and the MOV runs once ([TOP-ISA-13]); ANEMOS would jump and
 keep looping.
 
+ANEMOS spends a triggering command on every JUMP fetch. Its decoder handles
+the JUMP in the cycle of its own command, and the PC shows the target in the
+next cycle. Its assembler (`inputs/src/nmc_assembler.cpp`) also emits a
+command for each executed JUMP. In the ANEMOS run of the same program
+(case A of [examples/anemos_ctrl.out](examples/anemos_ctrl.out)), the three
+MOVs, three JUMP fetches and EXIT take 7 commands. bankside takes 4. The
+order of instructions is the same; only the count of commands differs. This
+is an intended difference ([TOP-ISA-4] is **[paper]**: the zero-cycle
+JUMP).
+
+#### When a JUMP rule is broken
+
+Each of the three JUMP programming rules has a defined outcome, so the
+reference model and the RTL agree on a broken program too.
+
+- **[TOP-ISA-26]** A JUMP at PC *p* with IMM0 = 0 or IMM0 > *p* (outside
+  [TOP-ISA-14]) is illegal ([TOP-ISA-2]). It executes as a one-slot NOP
+  ([TOP-ISA-24]): it takes the slot, isn't taken, leaves the loop state
+  alone, sets `err_illegal` and PC ← *p* + 1. Every JUMP at PC 0 is
+  illegal. The check is made whenever a JUMP is fetched as the first word of
+  a slot. A JUMP reached from another JUMP is first held over to the next
+  slot ([TOP-ISA-27]) and checked there. **[bankside]**
+- **[TOP-ISA-27]** A JUMP is resolved only as the first word fetched in a
+  slot. If the instruction a JUMP leads to (its target, or PC + 1 when it
+  falls through) is itself a JUMP (breaking [TOP-ISA-7]), the second JUMP is
+  not resolved in that slot. The slot issues `NOP 1`: no register-file write,
+  no bank access, no loop-state change. The PC is set to the second JUMP's
+  address, so the next slot fetches that JUMP first and resolves it as usual
+  ([TOP-ISA-3], [TOP-ISA-26], [TOP-ISA-28]). `err_illegal` is not set.
+  **[bankside]**
+- **[TOP-ISA-28]** There is one loop state, and the table of [TOP-ISA-3]
+  applies to every JUMP fetched, whatever its PC. The state doesn't record
+  which JUMP started the loop. So a JUMP inside another loop's body (breaking
+  [TOP-ISA-6]) reads and changes the outer loop's `loop_active` and
+  `loop_cnt`. Nothing is flagged in hardware. **[ANEMOS]** (its decoder keeps
+  one `jmp_act_reg`/`jmp_cnt_reg` pair and no loop PC; run in case D below).
+
+How each was chosen:
+
+| Rule broken | Options weighed | Chosen, and why |
+|---|---|---|
+| [TOP-ISA-14] (IMM0 = 0 or > PC) | (a) illegal under [TOP-ISA-2]; (b) target wraps modulo 32; (c) ANEMOS's behaviour: its PC is 8 bits wide, so PC − IMM0 wraps modulo 256, and a CRF read at PC ≥ 32 returns 0, which is `NOP 0` (256 cycles), after which the PC goes to 0 (case C) | (a). Under (b), `JUMP -5, 1` at PC 2 would run CRF[29] to CRF[31], which the program never wrote and which aren't reset ([TOP-ARCH-5]), and an IMM0 > PC would become a forward jump that tests would have to cover. (c) depends on PC values bankside's 5-bit PC can't hold. (a) costs an 8-bit comparison against the PC, reuses the illegal path, and shows the error on `err_illegal` in silicon. The paper shows only backward jumps (`JUMP -1, 7`, Fig. 5) and gives no range |
+| [TOP-ISA-7] (JUMP at a JUMP's target or after a JUMP) | (a) hold the second JUMP over one slot (chosen); (b) issue the second JUMP as a NOP and go on at its PC + 1; (c) make it illegal | (a) keeps the loop-state transitions the program asked for: the second JUMP still counts, one slot late. In that one case bankside spends a command on a JUMP, just as ANEMOS does on every JUMP. (b) would silently skip a loop's back edge. (c) would add a second illegal class decided by the previous word, not the word itself. A JUMP that sees another JUMP is the only case where the fetch would have to resolve two in one slot ([TOP-ISA-4]), and (a) never needs that |
+| [TOP-ISA-6] (nested loop) | (a) keep the single loop state (chosen); (b) store the PC of the JUMP that set `loop_active` and make a JUMP at another PC illegal while it is set | (a). It is what [TOP-ISA-3] already implies and what ANEMOS does, and the paper gives no nesting. With the paper silent, ANEMOS decides. (b) would cost a 5-bit register and a comparator to report a program error the assembler already rejects ([programming rules](#programming-rules)) |
+
+With [TOP-ISA-14] enforced, breaking [TOP-ISA-7] always breaks [TOP-ISA-6]
+too. A JUMP's target lies before it, so if the target is a JUMP, that JUMP is
+inside the first one's body. If a JUMP follows a JUMP, the first is inside
+the second's body. So [TOP-ISA-27] decides when the second JUMP is resolved,
+and [TOP-ISA-28] decides what it does.
+
+**Worked cases.** Generated by [examples/loop_trace.py](examples/loop_trace.py),
+which checks these tables. Its ANEMOS columns are checked against a run of
+ANEMOS's own decoder, PC unit and CRF
+([examples/anemos_ctrl.cpp](examples/anemos_ctrl.cpp),
+[output](examples/anemos_ctrl.out)). One row per triggering command. "ANEMOS:
+decoded" is the word its decoder acted on. "(NOP slot)" is a command that
+falls inside a multi-cycle NOP.
+
+*Case 6: IMM0 = 0, [TOP-ISA-26].* `JUMP -0, 3` at PC 1:
+
+```
+PC 0  MOV GRF_A[0], EVEN_BANK
+PC 1  JUMP -0, 3                 ; illegal: IMM0 = 0
+PC 2  EXIT
+```
+
+| Slot | bankside: issued | `err_illegal` | bankside loop state after | ANEMOS: decoded | ANEMOS loop state after |
+|---|---|---|---|---|---|
+| 1 | PC 0 MOV | 0 | active 0 | PC 0 MOV | active 0 |
+| 2 | PC 1 JUMP illegal | 1 | active 0 | PC 1 JUMP | active 1, cnt 2 |
+| 3 | PC 2 EXIT | 1 | active 0 | PC 1 JUMP | active 1, cnt 1 |
+| 4 | PC 0 MOV | 1 | active 0 | PC 1 JUMP | active 1, cnt 0 |
+
+bankside: one illegal slot, then EXIT. ANEMOS jumps to the JUMP itself, so it
+spends IMM1 + 1 = 4 commands on it before EXIT.
+
+*Case 7: IMM0 > PC, [TOP-ISA-26].* `JUMP -5, 1` at PC 2:
+
+```
+PC 0  MOV GRF_A[0], EVEN_BANK
+PC 1  MOV GRF_B[0], ODD_BANK
+PC 2  JUMP -5, 1                 ; illegal: IMM0 > PC
+PC 3  EXIT
+```
+
+| Slot | bankside: issued | `err_illegal` | bankside loop state after | ANEMOS: decoded | ANEMOS loop state after |
+|---|---|---|---|---|---|
+| 1 | PC 0 MOV | 0 | active 0 | PC 0 MOV | active 0 |
+| 2 | PC 1 MOV | 0 | active 0 | PC 1 MOV | active 0 |
+| 3 | PC 2 JUMP illegal | 1 | active 0 | PC 2 JUMP | active 1, cnt 0 |
+| 4 | PC 3 EXIT | 1 | active 0 | PC 253 NOP | active 1, cnt 0 |
+| 5 | PC 0 MOV | 1 | active 0 | (NOP slot) | active 1, cnt 0 |
+
+ANEMOS's PC becomes 2 − 5 mod 256 = 253. The CRF read there returns 0, a
+`NOP 0`, and the following 255 commands are NOP slots.
+
+*Case 8: nested loops, [TOP-ISA-28].* The intent is an outer loop over PC 0
+to 3, run twice, and an inner loop over PC 1, run twice each time: PC 1 four
+times and EXIT in slot 9.
+
+```
+PC 0  MOV GRF_A[0], EVEN_BANK
+PC 1  MOV GRF_B[0], ODD_BANK
+PC 2  JUMP -1, 1                 ; inner loop, inside the outer one's body
+PC 3  MOV GRF_A[1], EVEN_BANK
+PC 4  JUMP -4, 1
+PC 5  EXIT
+```
+
+| Slot | bankside: issued | `err_illegal` | bankside loop state after | ANEMOS: decoded | ANEMOS loop state after |
+|---|---|---|---|---|---|
+| 1 | PC 0 MOV | 0 | active 0 | PC 0 MOV | active 0 |
+| 2 | PC 1 MOV | 0 | active 0 | PC 1 MOV | active 0 |
+| 3 | PC 1 MOV | 0 | active 1, cnt 0 | PC 2 JUMP | active 1, cnt 0 |
+| 4 | PC 3 MOV | 0 | active 0 | PC 1 MOV | active 1, cnt 0 |
+| 5 | PC 0 MOV | 0 | active 1, cnt 0 | PC 2 JUMP | active 0 |
+| 6 | PC 1 MOV | 0 | active 1, cnt 0 | PC 3 MOV | active 0 |
+| 7 | PC 3 MOV | 0 | active 0 | PC 4 JUMP | active 1, cnt 0 |
+| 8 | PC 0 MOV | 0 | active 1, cnt 0 | PC 0 MOV | active 1, cnt 0 |
+| 9 | PC 1 MOV | 0 | active 1, cnt 0 | PC 1 MOV | active 1, cnt 0 |
+| 10 | PC 3 MOV | 0 | active 0 | PC 2 JUMP | active 0 |
+| 11 | PC 0 MOV | 0 | active 1, cnt 0 | PC 3 MOV | active 0 |
+| 12 | PC 1 MOV | 0 | active 1, cnt 0 | PC 4 JUMP | active 1, cnt 0 |
+| 13 | PC 3 MOV | 0 | active 0 | PC 0 MOV | active 1, cnt 0 |
+| 14 | PC 0 MOV | 0 | active 1, cnt 0 | PC 1 MOV | active 1, cnt 0 |
+
+From slot 4 on, bankside cycles through PC 3, 0 and 1 for ever. When the outer JUMP
+starts the loop again (`loop_cnt` = 0), the inner JUMP finds `loop_active` = 1
+and `loop_cnt` = 0. It takes that as its own last iteration and clears the
+state, so the outer JUMP starts again. EXIT is never reached
+(`loop_trace.py` runs 1000 slots), and only reset ends the run. ANEMOS cycles
+the same way (period 5 commands, since its JUMPs take a command each). The
+outcome is the same in both, so VER-2 has no difference to mask here.
+
+*Case 9: a JUMP right after a JUMP, [TOP-ISA-27].*
+
+```
+PC 0  MOV GRF_A[0], EVEN_BANK
+PC 1  JUMP -1, 1
+PC 2  JUMP -2, 0                 ; follows a JUMP; IMM1 = 0, never taken
+PC 3  EXIT
+```
+
+| Slot | bankside: issued | `err_illegal` | bankside loop state after | ANEMOS: decoded | ANEMOS loop state after |
+|---|---|---|---|---|---|
+| 1 | PC 0 MOV | 0 | active 0 | PC 0 MOV | active 0 |
+| 2 | PC 0 MOV | 0 | active 1, cnt 0 | PC 1 JUMP | active 1, cnt 0 |
+| 3 | NOP 1 (the JUMP at PC 2 waits) | 0 | active 0 | PC 0 MOV | active 1, cnt 0 |
+| 4 | PC 3 EXIT | 0 | active 0 | PC 1 JUMP | active 0 |
+| 5 | PC 0 MOV | 0 | active 0 | PC 2 JUMP | active 1, cnt 4294967295 |
+
+In slot 3 the first JUMP falls through to PC 2, which holds a JUMP, so the
+slot is `NOP 1` and the second JUMP is resolved in slot 4 (never taken,
+[TOP-ISA-13]), with EXIT issued in the same slot. ANEMOS spends a command on
+each JUMP fetch anyway. Its last row differs only because of IMM1 = 0
+([TOP-ISA-13]).
+
 ### EXIT
 
 `EXIT` ends the microkernel. **[TOP-ISA-5]** PC ← 0 and the loop state
@@ -170,7 +442,7 @@ EXIT resets only the PC).
 
 `MOV dst, src` or `MOV(RELU) dst, src` copies a register or bank column.
 **[paper]** (GRF ← GRF/bank, ReLU), **[ANEMOS]** (SRF and bank destinations,
-the even/odd pairing, GRF → SRF uses lane 0).
+the even/odd pairing, GRF → SRF uses lane 0, [TOP-ISA-29]).
 
 - **[TOP-ISA-15]** MOV performs, for each legal (src, dst) pair:
 
@@ -185,8 +457,39 @@ the even/odd pairing, GRF → SRF uses lane 0).
 
   "GRF" is GRF_A or GRF_B and "SRF" is SRF_M or SRF_A, in any combination.
   Any other pair is illegal ([TOP-ISA-2]), including bank ↔ SRF, bank → bank
-  and crossed pairs such as EVEN_BANK → GRF_B. With R = 1, ReLU
-  ([TOP-FP-8]) is applied to the value on its way.
+  and crossed pairs such as EVEN_BANK → GRF_B.
+- **[TOP-ISA-29]** **Lanes.** Lane *l* (0 to 15) of a 256-bit value (a GRF
+  entry, a bank column, `bank_rd_data`, `bank_wr_data`) is bits
+  16*l* + 15 to 16*l*. MOV from a GRF entry into an SRF entry writes lane 0,
+  bits 15–0, and ignores the other 15 lanes. **[ANEMOS]** (its SRF write
+  input from the GRFs is wired to `grfa_out1[0]` and `grfb_out1[0]`, the
+  first lane, in `src/imc_core.h` at `f2d4018`), **[bankside]** (lane
+  numbering by bit position). The paper says only that data moves "among
+  GRF, SRF, and BANK" (Section III-C), and its MOV count covers GRF
+  destinations only, so it names no lane. Other options weighed: another
+  fixed lane (no source picks one, and lane 0 is the one ANEMOS takes), or
+  making GRF → SRF illegal (it would drop eight ANEMOS-legal pairs, and with
+  them the only way to move a computed result into an SRF without the host).
+- **[TOP-ISA-30]** With R = 1, ReLU ([TOP-FP-8]) is applied on every legal
+  MOV pair, whatever the destination: to all 16 lanes for a GRF or bank
+  destination, and to the one 16-bit value for an SRF destination (after
+  lane 0 is selected, for GRF → SRF). **[paper]** (Section III-C: "a flag
+  bit determines whether or not ReLU is performed during data movement",
+  with no restriction to a destination). ANEMOS **differs**: it applies ReLU
+  in the GRF write multiplexer (`src/grf.cpp`), so its R has an effect only
+  when the destination is GRF_A or GRF_B, and a `MOV(RELU)` into an SRF or a
+  bank copies the value unchanged. The paper comes first.
+
+**Worked cases.** GRF_A[1] holds 0xBC00 (−1) in lane 0, 0x4000 (+2) in lane
+1, and other values in lanes 2 to 15. SRF_M[0] holds 0xC000 (−2). Words
+encoded by [examples/check_isa.py](examples/check_isa.py):
+
+| Instruction | Word | bankside | ANEMOS |
+|---|---|---|---|
+| `MOV SRF_M[2], GRF_A[1]` | `0x44000210` | SRF_M[2] ← 0xBC00 (lane 0) | same |
+| `MOV(RELU) SRF_M[2], GRF_A[1]` | `0x44001210` | SRF_M[2] ← 0x0000 (ReLU of lane 0) | SRF_M[2] ← 0xBC00 (R has no effect) |
+| `MOV(RELU) GRF_B[0], SRF_M[0]` | `0x42801000` | GRF_B[0] ← 0x0000 in all 16 lanes | same (a GRF destination) |
+| `MOV(RELU) EVEN_BANK, GRF_A[1]` | `0x48001010` | the bank column gets 0x0000 in lane 0, 0x4000 in lane 1, ReLU of each other lane | the column gets GRF_A[1] unchanged |
 
 ### FILL
 
@@ -344,9 +647,18 @@ rule can be seen in the program text ([TOP-HAZ-3], [TOP-ISA-6], [TOP-ISA-7],
 [TOP-ISA-14]); [TOP-HAZ-6] depends on the addresses the host sends and
 [TOP-IF-6] on the host itself, so the assembler can't check those.
 
-What the hardware does when a rule is broken is specified for [TOP-HAZ-3]
-([TOP-HAZ-5]) and [TOP-HAZ-6]. For [TOP-ISA-6], [TOP-ISA-7], [TOP-ISA-14] and
-[TOP-IF-6] it is not specified yet; tests must not depend on it.
+What the hardware does when a rule is broken is specified for every rule, so
+tests that break one on purpose can compare against the reference model after
+the violation too:
+
+| Rule | Outcome when broken | Flagged in hardware |
+|---|---|---|
+| [TOP-HAZ-3] | the read returns the old value ([TOP-HAZ-5]) | no |
+| [TOP-HAZ-6] | the bank read returns the old data ([TOP-HAZ-6]) | no |
+| [TOP-ISA-6] | one loop state for all JUMPs ([TOP-ISA-28]) | no |
+| [TOP-ISA-7] | the second JUMP waits one `NOP 1` slot ([TOP-ISA-27]) | no |
+| [TOP-ISA-14] | the JUMP is illegal: a one-slot NOP ([TOP-ISA-26]) | yes, `err_illegal` |
+| [TOP-IF-6] | the configuration write is ignored ([TOP-IF-8]) | no |
 
 1. [TOP-HAZ-3]: at least **2 slots between** a write to a GRF/SRF entry and an
    instruction that reads it as a source. The MAC accumulator is exempt
@@ -355,12 +667,48 @@ What the hardware does when a rule is broken is specified for [TOP-HAZ-3]
    same bank column (v1 bank model).
 3. **[TOP-ISA-6]** One loop at a time: no JUMP inside another loop's body.
    Loops in sequence are fine. **[ANEMOS]** (one loop counter; [TOP-ISA-3]
-   keeps one loop state).
+   keeps one loop state). In simulation the assertion can see it as a JUMP
+   fetched while `loop_active` = 1 at a PC other than that of the JUMP that
+   set `loop_active`.
 4. **[TOP-ISA-7]** A JUMP's target, and the instruction after a JUMP, must not
-   be a JUMP (each fetch resolves at most one). **[bankside]**
+   be a JUMP (each fetch resolves at most one). **[bankside]** ANEMOS has
+   no such rule: there every JUMP takes a command of its own.
 5. [TOP-ISA-14]: a JUMP's IMM0 is between 1 and the JUMP's own PC.
 6. [TOP-IF-6]: the host writes register files only while `busy` = 0 and
    `trig_valid` = 0.
+
+## Differences from ANEMOS
+
+ANEMOS (commit `f2d4018`) is the second reference model ([VER-2] in the
+[verification requirements](../dv/README.md)). These are all the
+differences in encoding, control and data movement that the spec knows of,
+each next to its rule. The FP16 ones are in the
+[theory of operation](theory_of_operation.md#fp16-arithmetic) ([TOP-FP-6],
+[TOP-FP-8]). How VER-2 masks or excludes each is up to DV.
+
+| Difference | Rule | bankside | ANEMOS |
+|---|---|---|---|
+| Field layout | [ANEMOS's layout](#anemoss-layout) | R at 12, 3-bit indices at 10–8, 6–4, 2–0 | R at 15, 5-bit indices at 14–10, 9–5, 4–0; control format identical |
+| Commands per JUMP fetch | [TOP-ISA-4] | 0 | 1 (each time the JUMP is fetched) |
+| `NOP n` length | [TOP-ISA-12] | *n* triggering commands; `NOP 0` = 1 | *n* clock cycles from its fetch, commands meanwhile dropped; `NOP 0` = 256 |
+| JUMP with IMM1 = 0 | [TOP-ISA-13] | never taken | taken; its 32-bit counter wraps to 2³² − 1 |
+| JUMP with IMM0 = 0 or > PC | [TOP-ISA-26] | illegal: one-slot NOP, `err_illegal` | IMM0 = 0: jumps to itself, IMM1 + 1 commands; IMM0 > PC: PC wraps modulo 256 into `NOP 0` words, then PC 0 |
+| JUMP at a JUMP's target or after a JUMP | [TOP-ISA-27] | one `NOP 1` slot, then the JUMP | no extra slot (every JUMP takes one) |
+| Nested loops | [TOP-ISA-28] | one loop state | the same |
+| EXIT | [TOP-ISA-5] | clears the loop state | PC ← 0 only |
+| Illegal words | [TOP-ISA-2], [TOP-ISA-24] | one-slot NOP, `err_illegal` | no check, no flag; a reserved opcode is a no-op, an illegal operand combination may partly execute |
+| MAD's SRC2 other than SRF_A | [TOP-ISA-23] | illegal | used as the addend |
+| MAD with a bank src0 and src1 = GRF_B | [TOP-ISA-19] | as specified | reads GRF_B at a stale index (an ANEMOS bug, see [MAD](#mad)) |
+| `MOV(RELU)` into an SRF or a bank | [TOP-ISA-30] | ReLU applied | R has no effect |
+| FILL | [TOP-ISA-16] | the four bank ↔ GRF moves | not implemented |
+| Configuration write while running | [TOP-IF-8] | ignored | applied; if an S5 write to the same file comes in the same cycle, the two are ORed bit by bit (enable, index, source select) |
+| `err_illegal` | [TOP-ISA-2] | exists | none |
+| Index values 8 to 31 | [ANEMOS's layout](#anemoss-layout) | can't be encoded | encodable; its files have 8 entries, and what an index above 7 reads is not traced here |
+
+Same in both, so nothing to mask: the opcode and operand codes, the loop
+state's transitions for a JUMP with IMM1 ≥ 1 ([TOP-ISA-3]), the PC wrap
+from 31 to 0 ([TOP-ISA-8]), GRF → SRF taking lane 0 ([TOP-ISA-29]), and a
+reserved opcode advancing the PC by one.
 
 ## Assembler syntax
 

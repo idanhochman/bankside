@@ -8,11 +8,15 @@ Checks, in order:
   3. The opcode and operand-code tables match the yaml.
   4. The legal-combination counts, computed from the yaml, match the guide.
   5. The guide's assembler examples assemble from the yaml encoding, decode
-     back to the same text, and are legal; the [TOP-ISA-22] and [TOP-ISA-23]
-     cases; every instruction word the guide writes out encodes as written.
+     back to the same text, and are legal, except lines marked "; illegal",
+     which must be illegal (a JUMP is checked at its PC, [TOP-ISA-26]); the
+     [TOP-ISA-22], [TOP-ISA-23] and [TOP-ISA-26] cases; every instruction word the guide writes out encodes as written.
   6. Requirement IDs: each is defined (in bold) exactly once, and every
      reference points to a defined ID.
   7. Every relative Markdown link resolves, including #anchors.
+  8. The ANEMOS layout table matches ANEMOS's opcodes.h (as printed by
+     anemos_ctrl.out) and the yaml; its worked words encode as written.
+     (Printed between 5 and 6.)
 
 Run from the repo root:
     .venv/bin/python src/top/doc/examples/check_isa.py
@@ -224,10 +228,16 @@ def decode(w):
     return f"{mn} " + ", ".join(parts)
 
 
-def legal(w):
+def legal(w, pc=None):
+    """[TOP-ISA-2]. A JUMP's legality depends on its PC ([TOP-ISA-26]); with
+    pc=None it is checked as a word only."""
     mn = decode(w).split()[0].replace("(RELU)", "")
     fmt = INS[mn]["format"]
     if fmt == "control":
+        if mn == "JUMP" and pc is not None:
+            imm0 = get(w, fmt, "imm0")
+            assert INS[mn]["illegal_when"] == "imm0 == 0 or imm0 > pc"
+            return not (imm0 == 0 or imm0 > pc)
         return True
     keys = ["dst", "src0"] + (["src1"] if fmt == "alu" else [])
     if mn == "MAD":
@@ -245,18 +255,26 @@ def norm(s):
 blocks = re.findall(r"```\n(.*?)```", guide, re.S)
 programs = [b for b in blocks if re.search(r"^(PC \d+\s+)?(NOP|MOV|MAC|JUMP)", b, re.M)]
 n = 0
+n_ill = 0
 for prog in programs:
-    for line in prog.splitlines():
-        line = re.sub(r"^PC \d+\s+", "", line.strip())
+    for raw in prog.splitlines():
+        m = re.match(r"PC (\d+)\s+", raw.strip())
+        pc = int(m.group(1)) if m else None
+        line = re.sub(r"^PC \d+\s+", "", raw.strip())
         if not norm(line):
             continue
+        # A line whose comment starts with "illegal" must be illegal
+        # ([TOP-ISA-2], [TOP-ISA-26]); every other line must be legal.
+        want = not re.search(r";\s*illegal", line)
         line = norm(line).replace("n-1", "3")   # the ReLU kernel with n = 4
         w = assemble(line)
         back = decode(w)
         check(norm(back) == norm(line), f"roundtrip {line!r} -> {back!r}")
-        check(legal(w), f"illegal: {line}")
-        print(f"       0x{w:08X}  {line}")
+        check(legal(w, pc) == want, f"{'il' if want else ''}legal: PC {pc} {line}")
+        tag = "" if want else "  (illegal, as marked)"
+        print(f"       0x{w:08X}  {'' if pc is None else f'PC {pc}  '}{line}{tag}")
         n += 1
+        n_ill += not want
 # The worked cases of [TOP-ISA-20]: a bank src1 carries j in SRC1#.
 w = assemble("MAD GRF_A[0], GRF_B[1], EVEN_BANK, SRF_A[5]")
 check(get(w, "alu", "src1_idx") == 5, "ISA-20 bank src1 index")
@@ -295,7 +313,53 @@ for m in re.finditer(r"`([A-Z]+ [^`]+)` \(`0x([0-9A-F]{8})`\)", guide):
     w = assemble(m.group(1))
     check(w == int(m.group(2), 16), f"prose word {m.group(1)}: 0x{m.group(2)}, assembles to 0x{w:08X}")
     print(f"       0x{w:08X}  {m.group(1)} (guide prose)")
-done(f"5 {n} example lines assemble, decode back and are legal")
+# [TOP-ISA-26]: a JUMP's legality depends on its PC.
+for pc, imm0, want in ((1, 0, False), (2, 5, False), (0, 1, False), (3, 3, True), (31, 31, True)):
+    w = put(put(0, "control", "opcode", 1), "control", "imm0", imm0)
+    check(legal(w, pc) == want, f"ISA-26: JUMP -{imm0} at PC {pc}")
+print("       JUMP -0 at PC 1, -5 at PC 2, -1 at PC 0: illegal; -3 at PC 3, -31 at PC 31: legal [TOP-ISA-26]")
+# [TOP-ISA-25]: NOP's IMM1 and EXIT's IMM0/IMM1 are ignored.
+check(INS["NOP"]["ignored"] == ["imm1"] and INS["EXIT"]["ignored"] == ["imm0", "imm1"], "ISA-25 yaml")
+done(f"5 {n} example lines assemble and decode back; {n - n_ill} legal, {n_ill} illegal as marked")
+
+# 8 (run before 6 and 7 for its place in the guide). ANEMOS layout ---------------
+ANEMOS_OUT = DOC / "examples" / "anemos_ctrl.out"
+out = ANEMOS_OUT.read_text()
+lay = {}
+for m in re.finditer(r"^  (\S+) (\d+) (\d+)$", out.split("Word ")[0], re.M):
+    lay[m.group(1)] = (int(m.group(2)), int(m.group(3)))
+sec = guide.split("### ANEMOS's layout")[1].split("\n## ")[0]
+
+
+def bits(cell):
+    hi, _, lo = cell.partition("–")
+    return int(hi), int(lo or hi)
+
+
+ALIAS = {"A (AAM)": "AAM", "R (RELU)": "RELU"}
+n = 0
+for line in sec.splitlines():
+    m = re.match(r"\| ([A-Z0-9#() ]+) \| [a-zA-Z, ]+ \| ([\d–]+) \| ([\d–]+) \| (yes|no)", line)
+    if not m:
+        continue
+    field, an, bs, same = m.groups()
+    key = ALIAS.get(field, field)
+    check(lay.get(key) == bits(an), f"ANEMOS {field}: guide {an}, opcodes.h {lay.get(key)}")
+    yname = NAME[field.split()[0]]
+    ybits = {tuple(f["fields"][yname]) for f in FMTS.values() if yname in f["fields"]}
+    check(ybits == {bits(bs)}, f"bankside {field}: guide {bs}, yaml {ybits}")
+    check((same == "yes") == (bits(an) == bits(bs)), f"'same' column for {field}")
+    n += 1
+check(n == len(lay), f"ANEMOS layout: {n} rows, opcodes.h has {len(lay)} fields")
+# The worked translation: ANEMOS word from the run, bankside word assembled.
+words = dict(re.findall(r"^Word (.+) (0x[0-9A-F]{8})$", out, re.M))
+for m in re.finditer(r"^\| `([^`]+)` \| (0x[0-9A-F]{8}) \| (0x[0-9A-F]{8}) \|", sec, re.M):
+    ins, aw, bw = m.groups()
+    check(words.get(ins) == aw, f"ANEMOS word {ins}: guide {aw}, run {words.get(ins)}")
+    check(assemble(ins) == int(bw, 16), f"bankside word {ins}: guide {bw}, assembles to 0x{assemble(ins):08X}")
+    print(f"       {ins}: ANEMOS {aw} (run), bankside {bw}")
+    n += 1
+done(f"8 ANEMOS layout table == opcodes.h (anemos_ctrl.out) and yaml; {len(words)} translated words")
 
 # 6. requirement IDs ------------------------------------------------------------------
 ID = r"TOP-[A-Z]+-\d+"
