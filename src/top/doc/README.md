@@ -43,9 +43,16 @@ by Samsung. It is a clean-room design from public papers.
 
 ## Conventions
 
-- **Requirement IDs.** Rules that tests check are tagged `[AREA-n]`, e.g.
-  `[HAZ-2]`. Areas: `ARCH`, `ISA`, `FP`, `PIPE`, `HAZ`, `IF`. Test plans
-  refer to these IDs. IDs are never reused.
+- **Requirement IDs.** Rules that tests check are tagged `[TOP-AREA-n]`, e.g.
+  `[TOP-HAZ-2]`. `TOP` is this module's prefix (see
+  [../README.md](../README.md)); areas are `ARCH`, `ISA`, `FP`, `PIPE`, `HAZ`,
+  `IF`. Test plans refer to these IDs. IDs are never reused, and their numbers
+  carry no order. Draft 0.1 wrote them without the prefix: its `[HAZ-2]` is
+  `[TOP-HAZ-2]` here, and the unprefixed forms are retired. An ID is *defined*
+  where it is in bold; elsewhere it is a reference.
+- **Source tags.** Every rule is tagged `[paper]` (ISCA 2021 or Hot Chips 33),
+  `[ANEMOS]` or `[bankside]` (our own choice), in that order of precedence.
+  When the sources differ, the rule says what the other one does.
 - **Lanes.** A 256-bit vector holds 16 FP16 lanes; lane *i* is bits
   `[16i+15 : 16i]`, so lane 0 is in the low bits.
 - **Slot.** One issue slot is one triggering command. Each triggering command

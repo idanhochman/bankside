@@ -1,0 +1,33 @@
+Case 1: JUMP -1, 2 (bankside)
+
+| Slot | JUMP fetched (state before → after) | Instruction issued | PC after |
+|---|---|---|---|
+| 1 | – | PC 0 MOV | 1 |
+| 2 | PC 1: active 0 → 1, cnt – → 1, jump to 0 | PC 0 MOV | 1 |
+| 3 | PC 1: active 1, cnt 1 → 0, jump to 0 | PC 0 MOV | 1 |
+| 4 | PC 1: active 1 → 0, cnt 0, fall through | PC 2 EXIT | 0 |
+
+  body ran 3 times (IMM1 + 1 = 3)
+
+Case 2: times the body runs, `JUMP -1, IMM1`
+  IMM1  bankside  ANEMOS
+     0         1  >10000 (still looping, cnt 4294957297)
+     1         2  2
+     2         3  3
+     7         8  8
+
+Case 3: slots taken by `NOP IMM0`
+  IMM0  bankside  ANEMOS
+     0         1  256
+     1         1  1
+     2         2  2
+   255       255  255
+
+Case 4: PC over 34 slots of NOP 1: ... [30, 31, 0, 1]
+
+Case 5: ReLU kernel, `JUMP -3, n-1`: body runs
+  n = 1: 1 times, 5 slots (4 per column + EXIT)
+  n = 2: 2 times, 9 slots (4 per column + EXIT)
+  n = 5: 5 times, 21 slots (4 per column + EXIT)
+
+ok   all cases match the spec

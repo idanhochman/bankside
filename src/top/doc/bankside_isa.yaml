@@ -2,8 +2,11 @@
 #
 # The spec tables (programmers_guide.md), the SystemVerilog package, the
 # Python decoder/assembler and the legal-combination coverage bins are meant to
-# be generated from this file (generators come with the reference model, step 6
-# of the plan). Until then the doc tables are written by hand and must match.
+# be generated from this file (generators come with the reference model, M3 in
+# pm/milestones.md). Until then the doc tables are written by hand and must
+# match; examples/check_isa.py checks the format table and the counts.
+#
+# Requirement IDs in comments ([TOP-...]) point to the prose rule.
 #
 # Sources: field layout from ISCA 2021 Table III (Lee et al.); opcode and
 # operand-source values from ANEMOS (github.com/gem5-X/cnm_framework, BSD-3);
@@ -40,7 +43,7 @@ formats:
       src0_idx: [6, 4]
       src1_idx: [2, 0]
   # Bits not listed in a format are unused: the assembler writes 0 and the
-  # hardware ignores them.
+  # hardware ignores them [TOP-ISA-1].
 
 # 3-bit operand-source codes (DST/SRC0/SRC1/SRC2 fields).
 operands:
@@ -51,8 +54,15 @@ operands:
   EVEN_BANK: {code: 4, kind: bank, width: 256}
   ODD_BANK:  {code: 5, kind: bank, width: 256}
 # Codes 6 and 7 are reserved: an instruction using them is illegal.
+# An index field (dst_idx, src0_idx, src1_idx) whose operand is a bank is
+# ignored [TOP-ISA-9], except MAD's src1_idx (see MAD: src2_idx).
 
-# Opcode values not listed (3, 6, 7, 12-15) are reserved: illegal.
+# Opcode values not listed (3, 6, 7, 12-15) are reserved: illegal [TOP-ISA-2].
+#
+# legal: the allowed operand codes, per field. A field not named in an entry
+# is not checked: e.g. ADD/MUL/MAC ignore src2 (src2: ignored), so any value
+# there, even a reserved code, is legal [TOP-ISA-10]. Every combination in an
+# entry's cross product is legal unless a listed constraint rules it out.
 #
 # stages: which of MULT (S3) and ADD (S4) the instruction uses. Every
 # instruction passes through all five stages; unused ones just carry it along.
@@ -61,23 +71,26 @@ instructions:
   NOP:
     opcode: 0
     format: control
-    slots: imm0          # IMM0 = number of slots; IMM0 = 0 is treated as 1
+    slots: imm0          # IMM0 = number of slots; IMM0 = 0 is treated as 1 [TOP-ISA-12]
   JUMP:
     opcode: 1
     format: control
-    slots: 0             # resolved in fetch
-    # IMM0 = backward offset (target = PC - IMM0), 1..PC
-    # IMM1 = number of jumps taken; the body runs IMM1 + 1 times; 0 = never jump
+    slots: 0             # resolved in fetch [TOP-ISA-4]
+    # IMM0 = backward offset (target = PC - IMM0); programs keep it in 1..PC
+    #        [TOP-ISA-14]
+    # IMM1 = number of jumps taken; the body runs IMM1 + 1 times; 0 = never
+    #        jump [TOP-ISA-13]. Loop state and transitions: [TOP-ISA-3].
   EXIT:
     opcode: 2
     format: control
-    slots: 1
+    slots: 1             # PC <- 0, loop state cleared [TOP-ISA-5]
   MOV:
     opcode: 4
     format: data
     slots: 1
     relu: allowed
-    # (src0, dst) pairs. "grf" / "srf" stand for both halves / both files.
+    # (src0, dst) pairs: every src0 of an entry goes with every dst of it
+    # [TOP-ISA-15].
     legal:
       - {src0: [GRF_A, GRF_B, SRF_M, SRF_A], dst: [GRF_A, GRF_B, SRF_M, SRF_A]}
       - {src0: [EVEN_BANK], dst: [GRF_A]}
@@ -88,7 +101,7 @@ instructions:
     opcode: 5
     format: data
     slots: 1
-    relu: ignored
+    relu: ignored        # [TOP-ISA-16]
     legal:
       - {src0: [EVEN_BANK], dst: [GRF_A]}
       - {src0: [ODD_BANK],  dst: [GRF_B]}
@@ -99,7 +112,8 @@ instructions:
     format: alu
     slots: 1
     stages: [ADD]
-    # dst = src0 + src1
+    # dst = src0 + src1 [TOP-ISA-17]
+    src2: ignored
     legal:
       - src0: [GRF_A, GRF_B, EVEN_BANK, ODD_BANK, SRF_A]
         src1: [GRF_A, GRF_B, EVEN_BANK, ODD_BANK, SRF_A]
@@ -110,7 +124,8 @@ instructions:
     format: alu
     slots: 1
     stages: [MULT]
-    # dst = src0 * src1
+    # dst = src0 * src1 [TOP-ISA-18]
+    src2: ignored
     legal:
       - src0: [GRF_A, GRF_B, EVEN_BANK, ODD_BANK]
         src1: [GRF_A, GRF_B, EVEN_BANK, ODD_BANK, SRF_M]
@@ -121,7 +136,10 @@ instructions:
     format: alu
     slots: 1
     stages: [MULT, ADD]
-    # dst = round(round(src0 * src1) + SRF_A[src1_idx])
+    # dst = round(round(src0 * src1) + SRF_A[src1_idx]) [TOP-ISA-19]
+    # The SRF_A index is the src1_idx field, even when src1 is a bank
+    # [TOP-ISA-20].
+    src2_idx: src1_idx
     legal:
       - src0: [GRF_A, GRF_B, EVEN_BANK, ODD_BANK]
         src1: [GRF_A, GRF_B, EVEN_BANK, ODD_BANK, SRF_M]
@@ -133,7 +151,8 @@ instructions:
     format: alu
     slots: 1
     stages: [MULT, ADD]
-    # GRF_B[dst_idx] = round(GRF_B[dst_idx] + round(src0 * src1)); src2 ignored
+    # GRF_B[dst_idx] = round(GRF_B[dst_idx] + round(src0 * src1)) [TOP-ISA-21]
+    src2: ignored
     legal:
       - src0: [GRF_A, GRF_B, EVEN_BANK, ODD_BANK]
         src1: [GRF_A, GRF_B, EVEN_BANK, ODD_BANK, SRF_M]
@@ -141,7 +160,7 @@ instructions:
     constraints: [one_bank_operand]
 
 constraints:
-  one_bank_operand: at most one of the sources is EVEN_BANK or ODD_BANK
+  one_bank_operand: at most one of the sources is EVEN_BANK or ODD_BANK  # [TOP-ARCH-7]
   one_read_per_srf: each SRF file (SRF_M, SRF_A) is read at most once
 
 # v1 has no AAM: an ALU instruction with aam = 1 is illegal (v2 adds it).
