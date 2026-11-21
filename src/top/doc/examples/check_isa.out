@@ -43,10 +43,10 @@ ok   4 legal-combination counts from the yaml == guide table
        0x811F0200  ADD GRF_A[2], EVEN_BANK, SRF_A[0] with SRC2 = 7: legal
 ok   5 30 example lines assemble, decode back and are legal
        ARCH [1, 2, 3, 4, 5, 6, 7, 8]
-       FP   [1, 2, 3, 4, 5, 6, 7, 8]
+       FP   [1, 2, 3, 4, 5, 6, 7, 8, 9]
        HAZ  [1, 2, 3, 4, 5, 6]
        IF   [1, 2, 3, 4, 5, 6, 7]
        ISA  [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21]
        PIPE [1, 2, 3]
-ok   6 53 IDs, each defined once; all references defined
-ok   7 19 relative links resolve
+ok   6 54 IDs, each defined once; all references defined
+ok   7 23 relative links resolve
