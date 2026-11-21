@@ -27,7 +27,8 @@ import tempfile
 OWNED = {
     "architect": ["src/*/doc/**"],
     "designer": ["src/*/rtl/**", "src/*/syn/**"],
-    "dv": ["src/*/dv/**", "src/*/opendv.yaml", ".github/workflows/**"],
+    "dv": ["src/*/dv/**", "src/*/opendv.yaml", "opendv.yaml",
+           ".github/workflows/**"],
     "pm": ["pm/**", "README.md", ".github/ISSUE_TEMPLATE/**",
            ".github/pull_request_template.md"],
 }

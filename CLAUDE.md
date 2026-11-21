@@ -36,7 +36,7 @@ outside your paths.
 |---|---|
 | `src/*/doc/` (the module's spec) | architect |
 | `src/*/rtl/`, `src/*/syn/` | designer |
-| `src/*/dv/`, `src/*/opendv.yaml`, `.github/workflows/` | DV |
+| `src/*/dv/`, `src/*/opendv.yaml`, the root `opendv.yaml`, `.github/workflows/` | DV |
 | `pm/`, `README.md`, `.github/ISSUE_TEMPLATE/`, `.github/pull_request_template.md` | PM (milestones change only when the user asks) |
 | `.claude/`, `CLAUDE.md`, `src/common/util/` | the user (the maintainer) only |
 
