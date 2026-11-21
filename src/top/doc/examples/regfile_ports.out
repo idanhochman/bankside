@@ -1,0 +1,26 @@
+Read ports from the yaml legal lists (S2 sources + S4 accumulator):
+  file    S2  S4 ports  S2 peak reached by
+  GRF_A    2   0     2  ADD dst=GRF_A, src0=GRF_A, src1=GRF_A
+  GRF_B    2   1     3  ADD dst=GRF_A, src0=GRF_B, src1=GRF_B
+  SRF_M    1   0     1  MOV dst=GRF_A, src0=SRF_M
+  SRF_A    1   0     1  MOV dst=GRF_A, src0=SRF_A
+  GRF_A  theory_of_operation.md: 2  yaml: 2
+  GRF_B  theory_of_operation.md: 3  yaml: 3
+  SRF_M  theory_of_operation.md: 1  yaml: 1
+  SRF_A  theory_of_operation.md: 1  yaml: 1
+ok   read-port counts from the yaml == theory_of_operation.md register-file table
+
+R1 alternative: MAC/MAD without (GRF_A, GRF_A) and (GRF_B, GRF_B):
+  file    S2  S4 ports  S2 peak reached by
+  GRF_A    2   0     2
+  GRF_B    2   1     3
+  SRF_M    1   0     1
+  SRF_A    1   0     1
+R11 alternative: no GRF_B as a MAC multiplier source:
+  file    S2  S4 ports  S2 peak reached by
+  GRF_A    2   0     2  ADD dst=GRF_A, src0=GRF_A, src1=GRF_A
+  GRF_B    2   1     3  ADD dst=GRF_A, src0=GRF_B, src1=GRF_B
+  SRF_M    1   0     1  MOV dst=GRF_A, src0=SRF_M
+  SRF_A    1   0     1  MOV dst=GRF_A, src0=SRF_A
+  GRF_B still needs 3 ports: an ADD or MUL with two GRF_B sources in S2
+  and a MAC reading its accumulator in S4 can be in the pipeline in the same cycle.
