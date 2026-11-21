@@ -1,0 +1,148 @@
+# bankside ISA: the single source of truth for the instruction encoding.
+#
+# The spec tables (programmers_guide.md), the SystemVerilog package, the
+# Python decoder/assembler and the legal-combination coverage bins are meant to
+# be generated from this file (generators come with the reference model, step 6
+# of the plan). Until then the doc tables are written by hand and must match.
+#
+# Sources: field layout from ISCA 2021 Table III (Lee et al.); opcode and
+# operand-source values from ANEMOS (github.com/gem5-X/cnm_framework, BSD-3);
+# everything else is bankside's own.
+
+version: 0.1-draft
+
+instruction_width: 32
+
+# Bit ranges are [msb, lsb], inclusive.
+formats:
+  control:
+    fields:
+      opcode: [31, 28]
+      imm0:   [18, 11]
+      imm1:   [10, 0]
+  data:
+    fields:
+      opcode:  [31, 28]
+      dst:     [27, 25]
+      src0:    [24, 22]
+      relu:    [12, 12]
+      dst_idx: [10, 8]
+      src0_idx: [6, 4]
+  alu:
+    fields:
+      opcode:   [31, 28]
+      dst:      [27, 25]
+      src0:     [24, 22]
+      src1:     [21, 19]
+      src2:     [18, 16]
+      aam:      [15, 15]
+      dst_idx:  [10, 8]
+      src0_idx: [6, 4]
+      src1_idx: [2, 0]
+  # Bits not listed in a format are unused: the assembler writes 0 and the
+  # hardware ignores them.
+
+# 3-bit operand-source codes (DST/SRC0/SRC1/SRC2 fields).
+operands:
+  GRF_A:     {code: 0, kind: grf,  entries: 8, width: 256}
+  GRF_B:     {code: 1, kind: grf,  entries: 8, width: 256}
+  SRF_M:     {code: 2, kind: srf,  entries: 8, width: 16}
+  SRF_A:     {code: 3, kind: srf,  entries: 8, width: 16}
+  EVEN_BANK: {code: 4, kind: bank, width: 256}
+  ODD_BANK:  {code: 5, kind: bank, width: 256}
+# Codes 6 and 7 are reserved: an instruction using them is illegal.
+
+# Opcode values not listed (3, 6, 7, 12-15) are reserved: illegal.
+#
+# stages: which of MULT (S3) and ADD (S4) the instruction uses. Every
+# instruction passes through all five stages; unused ones just carry it along.
+# slots: issue slots (triggering commands) consumed.
+instructions:
+  NOP:
+    opcode: 0
+    format: control
+    slots: imm0          # IMM0 = number of slots; IMM0 = 0 is treated as 1
+  JUMP:
+    opcode: 1
+    format: control
+    slots: 0             # resolved in fetch
+    # IMM0 = backward offset (target = PC - IMM0), 1..PC
+    # IMM1 = number of jumps taken; the body runs IMM1 + 1 times; 0 = never jump
+  EXIT:
+    opcode: 2
+    format: control
+    slots: 1
+  MOV:
+    opcode: 4
+    format: data
+    slots: 1
+    relu: allowed
+    # (src0, dst) pairs. "grf" / "srf" stand for both halves / both files.
+    legal:
+      - {src0: [GRF_A, GRF_B, SRF_M, SRF_A], dst: [GRF_A, GRF_B, SRF_M, SRF_A]}
+      - {src0: [EVEN_BANK], dst: [GRF_A]}
+      - {src0: [ODD_BANK],  dst: [GRF_B]}
+      - {src0: [GRF_A], dst: [EVEN_BANK]}
+      - {src0: [GRF_B], dst: [ODD_BANK]}
+  FILL:
+    opcode: 5
+    format: data
+    slots: 1
+    relu: ignored
+    legal:
+      - {src0: [EVEN_BANK], dst: [GRF_A]}
+      - {src0: [ODD_BANK],  dst: [GRF_B]}
+      - {src0: [GRF_A], dst: [EVEN_BANK]}
+      - {src0: [GRF_B], dst: [ODD_BANK]}
+  ADD:
+    opcode: 8
+    format: alu
+    slots: 1
+    stages: [ADD]
+    # dst = src0 + src1
+    legal:
+      - src0: [GRF_A, GRF_B, EVEN_BANK, ODD_BANK, SRF_A]
+        src1: [GRF_A, GRF_B, EVEN_BANK, ODD_BANK, SRF_A]
+        dst:  [GRF_A, GRF_B]
+    constraints: [one_bank_operand, one_read_per_srf]
+  MUL:
+    opcode: 9
+    format: alu
+    slots: 1
+    stages: [MULT]
+    # dst = src0 * src1
+    legal:
+      - src0: [GRF_A, GRF_B, EVEN_BANK, ODD_BANK]
+        src1: [GRF_A, GRF_B, EVEN_BANK, ODD_BANK, SRF_M]
+        dst:  [GRF_A, GRF_B]
+    constraints: [one_bank_operand]
+  MAD:
+    opcode: 10
+    format: alu
+    slots: 1
+    stages: [MULT, ADD]
+    # dst = round(round(src0 * src1) + SRF_A[src1_idx])
+    legal:
+      - src0: [GRF_A, GRF_B, EVEN_BANK, ODD_BANK]
+        src1: [GRF_A, GRF_B, EVEN_BANK, ODD_BANK, SRF_M]
+        src2: [SRF_A]
+        dst:  [GRF_A, GRF_B]
+    constraints: [one_bank_operand]
+  MAC:
+    opcode: 11
+    format: alu
+    slots: 1
+    stages: [MULT, ADD]
+    # GRF_B[dst_idx] = round(GRF_B[dst_idx] + round(src0 * src1)); src2 ignored
+    legal:
+      - src0: [GRF_A, GRF_B, EVEN_BANK, ODD_BANK]
+        src1: [GRF_A, GRF_B, EVEN_BANK, ODD_BANK, SRF_M]
+        dst:  [GRF_B]
+    constraints: [one_bank_operand]
+
+constraints:
+  one_bank_operand: at most one of the sources is EVEN_BANK or ODD_BANK
+  one_read_per_srf: each SRF file (SRF_M, SRF_A) is read at most once
+
+# v1 has no AAM: an ALU instruction with aam = 1 is illegal (v2 adds it).
+v1_illegal: [aam_set]

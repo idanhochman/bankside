@@ -9,9 +9,9 @@ done and the maintainer has reviewed the ones they chose to review.
 - **This file is the plan; GitHub is the status.** Each milestone here is
   filed as a GitHub milestone whose description links to its section below.
   Tasks, progress and what's blocked live on GitHub, not here.
-- **Who changes it:** the maintainer sets the milestones. The PM keeps this
-  file and GitHub in step, and changes a milestone only when the maintainer
-  asks.
+- **Who changes it:** the maintainer sets the milestones and creates them on
+  GitHub. The PM updates this file when the maintainer asks, and never adds,
+  drops or reorders a milestone itself.
 
 | # | Milestone | Roles |
 |---|---|---|
