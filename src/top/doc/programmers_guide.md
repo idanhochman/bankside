@@ -653,7 +653,7 @@ the violation too:
 
 | Rule | Outcome when broken | Flagged in hardware |
 |---|---|---|
-| [TOP-HAZ-3] | the read returns the old value ([TOP-HAZ-5]) | no |
+| [TOP-HAZ-3] | the read returns the newest value written by S5 up to its cycle ([TOP-HAZ-5]) | no |
 | [TOP-HAZ-6] | the bank read returns the old data ([TOP-HAZ-6]) | no |
 | [TOP-ISA-6] | one loop state for all JUMPs ([TOP-ISA-28]) | no |
 | [TOP-ISA-7] | the second JUMP waits one `NOP 1` slot ([TOP-ISA-27]) | no |
@@ -703,7 +703,10 @@ each next to its rule. The FP16 ones are in the
 | FILL | [TOP-ISA-16] | the four bank ↔ GRF moves | not implemented |
 | Configuration write while running | [TOP-IF-8] | ignored | applied; if an S5 write to the same file comes in the same cycle, the two are ORed bit by bit (enable, index, source select) |
 | `err_illegal` | [TOP-ISA-2] | exists | none |
-| Index values 8 to 31 | [ANEMOS's layout](#anemoss-layout) | can't be encoded | encodable; its files have 8 entries, and what an index above 7 reads is not traced here |
+| Index values 8 to 31 | [ANEMOS's layout](#anemoss-layout) | can't be encoded | encodable; its files have 8 entries, and they read 0 for an index above 7 and ignore a write to one (`rf_twoport.h`, `rf_threeport.h`; read, not run) |
+| Register files on reset | [TOP-ARCH-5], [TOP-ARCH-9] | kept; never-written entries hold an unpredicted power-up value | cleared to 0 |
+| A read in the cycle its entry is written | [TOP-HAZ-1] | write-through: the new value | the stored, old value (its gap slots differ anyway, [TOP-HAZ-3]) |
+| GRF_B read ports | [TOP-ARCH-10] | 3: the MAC accumulator has its own | 2: the accumulator's index is ORed into port 1's, so a GRF_B read through port 1 in the same cycle reads the ORed index |
 
 Same in both, so nothing to mask: the opcode and operand codes, the loop
 state's transitions for a JUMP with IMM1 ≥ 1 ([TOP-ISA-3]), the PC wrap

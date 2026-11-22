@@ -1,0 +1,12 @@
+{
+  "signal": [
+    {"name": "clk", "wave": "p......."},
+    {"name": "trig_valid", "wave": "1...0..."},
+    {"name": "PC 0 MOV GRF_A[1], SRF_M[1]", "wave": "=====x..", "data": ["S1", "S2", "S3", "S4", "S5 write"], "node": "....a..."},
+    {"name": "PC 1 NOP 2", "wave": "x==x....", "data": ["slot 1", "slot 2"]},
+    {"name": "PC 2 ADD GRF_B[2], GRF_A[1], GRF_A[1]", "wave": "x..=====", "data": ["S1", "S2 read", "S3", "S4", "S5"], "node": "....b..."}
+  ],
+  "edge": ["a~>b"],
+  "head": {"tick": 1},
+  "config": {"hscale": 2}
+}
