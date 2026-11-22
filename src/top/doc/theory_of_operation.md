@@ -162,10 +162,53 @@ what is read and written in each.
 | S4 | ADD | 16 FP16 adders (ADD, MAD, MAC). MAC reads its accumulator here. Others pass through. |
 | S5 | Write-back | Write the GRF or SRF, or drive the bank write port. |
 
-- **[TOP-PIPE-1]** Every instruction passes through all five stages in order. An
+- **[TOP-PIPE-1]** **Every write is in S5.** Every instruction passes
+  through all five stages in order, one stage per cycle, so an instruction
+  issued in cycle *c* is in S5 in cycle *c* + 4 whatever it is. An
   instruction that doesn't use MULT or ADD carries its value through that
-  stage unchanged. This keeps every write in S5 and in program order.
-  **[bankside]**
+  stage unchanged. Every write an instruction makes is done in its S5 cycle
+  and in no other: a GRF or SRF write from any instruction (MOV, FILL, ADD,
+  MUL, MAD, MAC), and a bank store ([TOP-ARCH-8]). So there is at most one
+  write in the whole unit per cycle, the writes come in program order, and
+  one write port per register file is enough ([TOP-ARCH-4]). **[paper]**
+  (five stages, the fifth writes back), **[bankside]** (every instruction
+  through every stage, bank stores in S5). v1 only for bank stores: v2
+  revisits their timing against the DRAM write timing ([TOP-ARCH-8]).
+
+  The paper says MAC goes through MULT and ADD "while MULT and ADD skip the
+  fourth and third stages, respectively", and that the unit "can skip the
+  second stage" when no bank data is needed (Section IV-B). It doesn't say
+  whether skipping a stage makes the instruction finish sooner. bankside
+  reads "skip" as "the stage does nothing for it", which keeps the
+  latency fixed. Options weighed:
+  - (a) every write in S5 (chosen).
+  - (b) ANEMOS's timing: a MOV whose source is a register, and a bank store,
+    write in the cycle they are decoded, while bank loads and arithmetic
+    results go through its write pipeline (`instr_decoder.cpp`,
+    `grfa_wr_en_comb`, `even_out_en`, `wr_en_pipe[MULT_STAGES +
+    ADD_STAGES]`, at `f2d4018`; read, not run).
+  - (c) the paper's "skip" read as a shorter latency: MUL and ADD would
+    write a cycle before MAC and MAD, MOV and FILL three cycles before.
+
+  Under (b) and (c) an instruction can write before an older one:
+  `ADD GRF_A[0], GRF_A[1], GRF_A[1]` followed directly by
+  `MOV GRF_A[0], SRF_M[1]` ends with the ADD's result, not the MOV's
+  (case H below). Two instructions can also write one file in the same
+  cycle (case I), which needs a second write port. Under (a) neither can
+  happen. The cost of (a) is latency: a MOV's result is readable 3 slots
+  later ([TOP-HAZ-3]), not on the next slot.
+- **[TOP-PIPE-4]** **Every slot is a pipeline entry.** Each cycle with
+  `trig_valid` = 1 and `rst_n` = 1 puts exactly one entry into S1 ([TOP-IF-1]),
+  and the entry moves one stage per cycle until it leaves S5, whatever
+  the slot issues: an instruction, an illegal word ([TOP-ISA-24]), EXIT, one
+  slot of a multi-cycle NOP ([TOP-PIPE-3]), or the `NOP 1` slot of
+  [TOP-ISA-27]. An entry that writes nothing does nothing in S2 to S5. No
+  other cycle makes an entry: a JUMP is never an entry of its own, since it
+  is resolved inside the slot of the instruction it leads to ([TOP-ISA-4]).
+  The edge that ends a cycle with `rst_n` = 0 removes every entry
+  ([TOP-IF-4]). **[bankside]** This is what "valid in S2 to S5" means for
+  `busy` ([TOP-IF-7]). The alternative, entries only for instructions that
+  write, is weighed there.
 - **[TOP-PIPE-2]** The pipeline is clocked continuously. A cycle with no triggering
   command inserts a bubble; instructions already in flight keep moving and
   complete. **[bankside]**
@@ -283,8 +326,8 @@ The consumer's S2 read (cycle 5) is in the producer's S5 cycle, so the value
 comes through write-through ([TOP-HAZ-1]) and GRF_B[2] gets 4.0, as in-order
 execution gives. Without write-through the read in cycle 5 returns the stored
 0.5 and GRF_B[2] gets 1.0; it would take `NOP 3` (k = 4). The NOP's slots are
-shown in S1 only; whether they travel down S2 to S5 is #24, and no register
-value depends on it.
+shown in S1 only. They do travel down S2 to S5 as entries ([TOP-PIPE-4]),
+but they carry nothing, so no register value depends on them.
 
 ![Case A: the ADD's S2 read in cycle 5 meets the MOV's S5 write of GRF_A[1]](img/hazard_distance_3.svg)
 
@@ -533,14 +576,202 @@ and the ANEMOS and NumPy columns come from runs it compares against
   command). **[paper]** (Table II's MUL and ADD combination counts follow from
   it; for MAC and MAD see [TOP-ISA-22] in the
   [programmer's guide](programmers_guide.md#legal-combinations-compared-with-the-paper)).
-- **[TOP-ARCH-8]** Bank writes (MOV/FILL to a bank) are driven in S5, to the address
-  of the instruction's own triggering command. **[bankside]**, v1 only; v2
-  revisits this against the real DRAM write timing.
+- **[TOP-ARCH-8]** **Bank stores.** A bank store (MOV or FILL with
+  EVEN_BANK or ODD_BANK as dst) is driven on `bank_wr_*` in its S5 cycle
+  ([TOP-PIPE-1], [TOP-IF-3]). It goes to the bank its dst names and to the row
+  and column of **its own triggering command**, the trigger of its S1 cycle,
+  which the unit carries down the pipeline with the instruction. The trigger
+  in the S5 cycle, if there is one, plays no part. **[paper]** (the address
+  is that of the command that triggers the instruction, Section IV-B),
+  **[bankside]** (S5). v1 only: in v2 the bank is a DRAM bank and its write
+  timing is the HBM2 write timing, so v2 revisits both the cycle and how the
+  address reaches the bank.
+
+  The two addresses differ whenever the slots after a store have other
+  columns. For example, the GEMV store of the
+  [hierarchy worked case](hierarchy.md#worked-case-the-gemv-pattern-through-the-modules)
+  is triggered with column 6 in cycle 6 and written in cycle 10. Its own
+  trigger's address puts it in column 6. That trace has no trigger in cycle
+  10, so with the S5 cycle's trigger the store would have no address at
+  all. Had the host started the next run at once, it would have landed in a
+  column of that run's. ANEMOS drives a store in the cycle of its own command
+  (`even_out_en`, above), so it too writes the command's own address.
+
+### The v1 bank
+
+In v1 the testbench is the bank ([interfaces.md](interfaces.md)). The unit
+sees EVEN_BANK and ODD_BANK as synchronous SRAMs behind one read port
+(`bank_rd_*`) and one write port (`bank_wr_*`), each used at most once per
+cycle:
+
+- a read requested in S1 is sampled at the end of that cycle, and its data
+  is on `bank_rd_data` in the next cycle, S2 ([TOP-IF-2]);
+- a store is written at the end of its S5 cycle ([TOP-IF-3]);
+- when a store and a read of the same column fall on the same clock edge,
+  the store is applied first and the read returns the stored data
+  ([TOP-IF-3]).
+
+**[bankside]** throughout. The papers' bank is a DRAM bank driven by the
+host's commands, with no cycle-level model to follow. ANEMOS's unit only
+drives a store onto its bank bus (`even_out_en`, `odd_out_en`) and has no
+bank model of its own; how its DRAM side orders a write and a read on one
+edge was not checked. Options weighed for the same-edge order:
+- (a) write first (chosen): distance 4 ([TOP-HAZ-6]). It is the same rule as
+  the register files' write-through ([TOP-HAZ-1]): a read in cycle *t* sees
+  every write whose S5 cycle is *t* or earlier. So [TOP-HAZ-5] and
+  [TOP-HAZ-7] have the same form. The testbench's bank model applies the
+  write before it samples the read.
+- (b) read first, as many SRAM macros do: distance 5, one more gap slot
+  before every reload of a column just stored.
+- (c) undefined, as in an SRAM whose same-address collision is not
+  specified: [TOP-HAZ-6] would then have to forbid a read 4 slots after a
+  store as well, so the distance would be 5 too, and a broken rule would have
+  no defined result.
+
 - **[TOP-HAZ-6]** **Programming rule for bank columns.** In v1, an instruction
   must not read a bank column (same bank, row and column) that a bank store
   issued fewer than **4 slots** earlier writes. In other words, at least 3
-  slots must separate the store from the read. If the rule is broken the read
-  returns the old data. The write is driven in S5 (cycle c+4); a later read is
-  requested in S1 and sampled by the bank at the end of that cycle, and the v1
-  bank applies writes before reads on the same clock edge ([TOP-IF-3]), so
-  k ≥ 4. **[bankside]**
+  slots must separate the store from the read. If the rule is broken, the
+  read returns what [TOP-HAZ-7] says. **[bankside]** Like [TOP-HAZ-3] it
+  counts slots, since bubbles only add cycles between the store and the
+  read.
+
+### Why the distance is 4
+
+Store *P* issued in cycle *c* writes the bank at the end of cycle *c* + 4.
+Reader *C* issued *k* slots later requests its column in S1, in cycle *c* +
+*k* or later (later only if there were bubbles), and the bank samples the
+request at the end of that cycle:
+
+| Bank applies on the same edge | *C* sees *P* if | so, without bubbles |
+|---|---|---|
+| store first (chosen) | *c* + *k* ≥ *c* + 4 | k ≥ 4 |
+| read first | *c* + *k* > *c* + 4 | k ≥ 5 |
+
+That is one slot more than [TOP-HAZ-3], because a register source is read
+in S2 and a bank source is requested in S1.
+
+**Worked case E: store then load at the limit, k = 4.** One trigger per
+cycle in cycles 1 to 5, each with column 3 of the same row. Lane 0 values;
+before the program GRF_A[1] = 0.5 (written by the host) and EVEN_BANK column
+3 holds 0.75.
+
+```
+PC 0  MOV EVEN_BANK, GRF_A[1]      ; P: column 3 <- 0.5
+PC 1  NOP 3                        ; [TOP-HAZ-6]
+PC 2  MOV GRF_A[0], EVEN_BANK      ; C: loads column 3
+```
+
+| Cycle | `trig_valid` | S1 | S2 | S3 | S4 | S5 | EVEN_BANK col 3 after the edge |
+|---|---|---|---|---|---|---|---|
+| 1 | 1 | PC 0 | – | – | – | – | 0.75 |
+| 2 | 1 | PC 1, slot 1 | PC 0: reads GRF_A[1] = 0.5 | – | – | – | 0.75 |
+| 3 | 1 | PC 1, slot 2 | – | PC 0 | – | – | 0.75 |
+| 4 | 1 | PC 1, slot 3 | – | – | PC 0 | – | 0.75 |
+| 5 | 1 | PC 2: `bank_rd_en`, EVEN col 3 | – | – | – | PC 0: `bank_wr_en`, EVEN col 3 ← 0.5 | 0.5 |
+| 6 | 0 | – | PC 2: `bank_rd_data` = **0.5** | – | – | – | 0.5 |
+| 7 | 0 | – | – | PC 2 | – | – | 0.5 |
+| 8 | 0 | – | – | – | PC 2 | – | 0.5 |
+| 9 | 0 | – | – | – | – | PC 2: GRF_A[0] ← 0.5 | 0.5 |
+
+The load's request and the store meet on the edge at the end of cycle 5. The
+store is applied first, so `bank_rd_data` in cycle 6 is 0.5 and GRF_A[0] gets
+0.5, as in-order execution gives. With a read-first bank the load would get
+0.75, and it would take `NOP 4` (k = 5).
+
+![Case E: the load's bank read request and the store's bank write fall in cycle 5](img/bank_store_load.svg)
+
+*Figure 2: case E, [TOP-IF-2], [TOP-IF-3] and [TOP-HAZ-6]. "PC 0 store" is
+`MOV EVEN_BANK, GRF_A[1]` and "PC 2 load" is `MOV GRF_A[0], EVEN_BANK`. The
+store drives `bank_wr_*` in its S5 cycle, cycle 5 (marker a). The load, issued 4 slots
+later, drives `bank_rd_*` in the same cycle (marker b). The bank applies the
+store first, so `bank_rd_data` in cycle 6 is the stored 0.5 (marker c).
+Source: [bank_store_load.wave.json](img/bank_store_load.wave.json).*
+
+The bank distance sweep of the script puts the load k = 1 to 6 slots after
+the store, with no bubbles: the smallest safe k is 4 with a write-first bank
+and 5 with a read-first one. The script also runs 20000 random programs with
+bank loads, stores, register moves, ADDs with a bank source, NOPs and random
+bubbles (seed 10). All 9151 that keep [TOP-HAZ-3] and [TOP-HAZ-6] end with
+the same registers and bank columns as in-order execution. With a read-first
+bank, 40 of them don't.
+
+- **[TOP-HAZ-7]** **When [TOP-HAZ-6] is broken.** The hardware still does
+  something defined. A bank read requested in S1 in cycle *t* returns, for
+  its bank, row and column, the data of the **newest bank store to that
+  column whose S5 cycle is *t* or earlier**. A store in cycle *t* itself
+  counts, because the bank applies it first ([TOP-IF-3]). If no instruction
+  has stored to the column, the read returns the bank's earlier contents:
+  whatever the testbench's bank held before the program. Stores of
+  instructions still in S2 to S4 are not seen. An SVA assertion flags the
+  broken rule in simulation, counting slots as [TOP-HAZ-6] does, and the
+  reference model raises an error. The assembler can't see the rule: it
+  depends on the addresses the host sends. **[bankside]**
+
+  Draft 0.1 said "the old data". That is right only when no other store to
+  the column is in flight. The same two cases as for [TOP-HAZ-5] show the
+  difference:
+  - **Case F, an older store in flight.** PC 1 breaks the rule (k = 3), and
+    PC 0 also stores to the column, one slot earlier. The read meets PC 0's
+    store and returns PC 0's data, not the data from before the program.
+  - **Case G, a bubble.** The same program with a cycle without a trigger
+    after PC 1. The rule is still broken in slots (k = 3), but the read is
+    4 cycles after PC 1. It meets PC 1's store, and the result equals
+    in-order execution.
+
+  Case F, one trigger per cycle in cycles 1 to 5, every trigger with column
+  3. Before the program GRF_A[1] = 0.5, GRF_A[2] = 0.25 and EVEN_BANK column
+  3 holds 0.75:
+
+  ```
+  PC 0  MOV EVEN_BANK, GRF_A[1]      ; column 3 <- 0.5
+  PC 1  MOV EVEN_BANK, GRF_A[2]      ; column 3 <- 0.25
+  PC 2  NOP 2                        ; breaks [TOP-HAZ-6]: k = 3 from PC 1
+  PC 3  MOV GRF_A[0], EVEN_BANK
+  ```
+
+  | Cycle | S1 | S2 | S3 | S4 | S5 | EVEN_BANK col 3 after the edge |
+  |---|---|---|---|---|---|---|
+  | 1 | PC 0 | – | – | – | – | 0.75 |
+  | 2 | PC 1 | PC 0: reads GRF_A[1] = 0.5 | – | – | – | 0.75 |
+  | 3 | PC 2, slot 1 | PC 1: reads GRF_A[2] = 0.25 | PC 0 | – | – | 0.75 |
+  | 4 | PC 2, slot 2 | – | PC 1 | PC 0 | – | 0.75 |
+  | 5 | PC 3: bank read col 3 | – | – | PC 1 | PC 0: col 3 ← 0.5 | 0.5 |
+  | 6 | – | PC 3: `bank_rd_data` = **0.5 (PC 0's store)** | – | – | PC 1: col 3 ← 0.25 | 0.25 |
+  | 7 | – | – | PC 3 | – | – | 0.25 |
+  | 8 | – | – | – | PC 3 | – | 0.25 |
+  | 9 | – | – | – | – | PC 3: GRF_A[0] ← 0.5 | 0.25 |
+
+  In-order execution gives 0.25. "The old data" (0.75) would give 0.75. The
+  hardware gives 0.5. In case G the load issues in cycle 6, meets PC 1's
+  store on that cycle's edge, and gives 0.25.
+
+  The script checks the rule's wording on every bank read of its 20000
+  random programs, legal or not (33137 reads): each returns the newest store
+  to its column with an S5 cycle no later than the read's S1 cycle. Draft
+  0.1's "old data", read as the newest store issued 4 or more slots before
+  the read, disagrees on 889 of them. For DV: a test that breaks
+  [TOP-HAZ-6] on purpose ([VER-10]) predicts the read from the cycles of the
+  trigger sequence, not from the slot count.
+
+### Worked cases: all writes in S5
+
+Option (b) of [TOP-PIPE-1] against the chosen (a), from the same script,
+one trigger per cycle. Before the program GRF_A[1] = 0.5 and SRF_M[1] = 2.0.
+
+- **Case H, write after write.**
+  `ADD GRF_A[0], GRF_A[1], GRF_A[1]` at PC 0, `MOV GRF_A[0], SRF_M[1]` at
+  PC 1. In order GRF_A[0] ends as 2.0, the MOV's value. With every write in
+  S5 the ADD writes in cycle 5 and the MOV in cycle 6, so GRF_A[0] = 2.0.
+  With ANEMOS's timing the MOV writes in its decode cycle, cycle 2, and the
+  ADD overwrites it in cycle 5, so GRF_A[0] = 1.0.
+- **Case I, two writes in one cycle.** The same ADD, then `NOP 3`, then
+  `MOV GRF_A[1], SRF_M[1]` issued in cycle 5. With ANEMOS's timing the ADD's
+  write of GRF_A[0] and the MOV's write of GRF_A[1] both fall in cycle 5,
+  so GRF_A needs two write ports. With every write in S5 they are in cycles
+  5 and 9.
+
+Script: [examples/hazard_trace.py](examples/hazard_trace.py) (sections 4
+and 5), output [examples/hazard_trace.out](examples/hazard_trace.out). Rerun
+from the repo root: `.venv/bin/python src/top/doc/examples/hazard_trace.py`
+(exits non-zero if a check fails).

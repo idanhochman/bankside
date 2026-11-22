@@ -48,14 +48,31 @@ register files. **[bankside]** throughout, unless marked.
 
 - **[TOP-IF-1]** A cycle with `trig_valid = 1` is one issue slot. The instruction
   at the PC enters S1 in that cycle (or, during a multi-cycle NOP, one NOP slot
-  is consumed).
-- **[TOP-IF-2]** **Bank read.** In the S1 cycle the unit drives `bank_rd_en`,
-  `bank_rd_sel` and the address. The bank samples them at the end of that
-  cycle and must drive `bank_rd_data` during the next cycle (S2), like a
-  synchronous SRAM with one cycle of read latency.
-- **[TOP-IF-3]** **Bank write.** `bank_wr_*` are registered outputs, valid in the
-  S5 cycle. The bank writes at the end of that cycle. Writes take effect
-  before reads sampled on the same edge ([TOP-HAZ-6]).
+  is consumed). Either way the slot is one pipeline entry that travels down
+  S1 to S5 ([TOP-PIPE-4]).
+- **[TOP-IF-2]** **Bank read.** In the S1 cycle of an instruction with a
+  bank source, the unit drives `bank_rd_en` = 1, `bank_rd_sel` (the bank
+  the source names) and `bank_rd_row`, `bank_rd_col` (its trigger's,
+  [TOP-ARCH-6]). These are combinational from `trig_*` and the fetched
+  word, since S1 is the trigger's own cycle. In every other cycle
+  `bank_rd_en` = 0 and the other `bank_rd_*` outputs are don't-care. The
+  bank samples them at the end of that cycle and must drive `bank_rd_data`
+  for the whole of the next cycle (S2), like a synchronous SRAM with one
+  cycle of read latency. The data is the column's contents after any store
+  applied on the same edge ([TOP-IF-3]). The unit uses `bank_rd_data` only
+  in the cycle after `bank_rd_en` = 1; in any other cycle its value is
+  don't-care. **[bankside]**
+- **[TOP-IF-3]** **Bank write.** `bank_wr_*` are registered outputs, driven
+  from the S4/S5 register, valid in the S5 cycle of a bank store
+  ([TOP-ARCH-8]). `bank_wr_en` = 1 in that cycle only, and the other
+  `bank_wr_*` outputs are don't-care while it is 0. The bank writes
+  `bank_wr_data` into the column at the end of that cycle. A read and a
+  write can be in the same cycle, to the same bank or not, and the bank
+  must take both. When they name the same column on the same edge, the
+  write is applied first and the read returns the written data. **[bankside]**,
+  v1 only. The options and the read-after-store distance it gives
+  ([TOP-HAZ-6]) are in the
+  [theory of operation](theory_of_operation.md#the-v1-bank).
 - **[TOP-IF-4]** **Reset.** On `rst_n = 0`: PC ← 0, the loop state
   (`loop_active`, `loop_cnt`, [TOP-ISA-3]) and the NOP counter cleared,
   all pipeline stages invalid, `err_illegal` ← 0. Register files keep their
@@ -71,7 +88,7 @@ register files. **[bankside]** throughout, unless marked.
   ignored.** In a cycle with `cfg_wr_en` = 1 and `busy` = 1 or
   `trig_valid` = 1, no register-file or CRF entry changes. The S5 write of
   that cycle, if any, goes ahead as usual. The `busy` used is the output's
-  value in that same cycle ([TOP-IF-7]; its exact cycles are #24). The
+  value in that same cycle ([TOP-IF-7]). The
   [TOP-IF-6] assertion still fires, and nothing is flagged on the ports.
   **[bankside]** Options weighed:
   - the S5 write wins only when both write the same file, and the
@@ -91,17 +108,196 @@ register files. **[bankside]** throughout, unless marked.
   bit (`instr_decoder.cpp`, `out_method`, at `f2d4018`; read, not run). That
   isn't a behaviour to copy.
 
-  Worked case: after a kernel's last trigger in cycle *c*, its last
-  instruction writes GRF_B[0] in S5 at cycle *c* + 4, so `busy` = 1 up to
-  then at least. A host write of SRF_A[0] in cycle *c* + 2 is ignored:
-  `dbg_rd_*` still shows the old SRF_A[0] in cycle *c* + 3. The same write
-  in the first cycle with `busy` = 0 and `trig_valid` = 0 takes effect
-  ([TOP-IF-5]).
-- **[TOP-IF-7]** **Busy.** `busy` = 1 while any of these holds: an instruction
-  is valid in any of S1 to S5, a multi-cycle NOP has slots left
-  ([TOP-ISA-12]), or `loop_active` = 1 ([TOP-ISA-3]). Otherwise `busy` = 0.
+  Worked case: a kernel's last trigger is in cycle *c* and ends it with no
+  NOP slots left and `loop_active` = 0 (EXIT, say). Its last entry is in S5
+  in cycle *c* + 4, so `busy` = 1 in cycles *c* + 1 to *c* + 4 and 0 from
+  *c* + 5 on ([TOP-IF-7]). A host write of SRF_A[0] in cycle *c* + 2 is
+  ignored: `dbg_rd_*` still shows the old SRF_A[0] in cycle *c* + 3. The
+  same write in cycle *c* + 5, the first with `busy` = 0 and `trig_valid` =
+  0, takes effect ([TOP-IF-5]). One in cycle *c* + 4 is ignored too, so a
+  configuration write that counts never meets an S5 write ([TOP-HIER-6]).
+- **[TOP-IF-7]** **Busy.** In each cycle *t*, `busy` = 1 if any of these
+  holds, and 0 otherwise:
+  1. an entry ([TOP-PIPE-4]) is in S2, S3, S4 or S5 in cycle *t*: a slot
+     was issued in one of the cycles *t* − 4 to *t* − 1, and no cycle from
+     its issue to *t* − 1 had `rst_n` = 0. Every slot counts: an
+     instruction, an illegal word, EXIT, each slot of a multi-cycle NOP,
+     the `NOP 1` slot of [TOP-ISA-27];
+  2. a multi-cycle NOP has slots left: at least one of its slots was
+     issued before cycle *t* and at least one was not ([TOP-ISA-12]). In
+     the cycle of its last slot it still has that slot left;
+  3. `loop_active` = 1 in cycle *t* ([TOP-ISA-3]). It changes at the end
+     of the S1 cycle of the JUMP that sets or clears it.
 
-Waveforms for these (WaveDrom) will be added with the RTL.
+  `busy` depends only on state the unit holds in registers during cycle
+  *t*. No input enters it combinationally: neither `trig_valid` nor
+  anything else. An entry in S1 doesn't count, since it exists only in a
+  cycle with `trig_valid` = 1. The designer may build `busy` as an OR of
+  those registers or as a register of its own with the same value.
+  **[bankside]**
+
+  So, for the host and for DV:
+  - **Rising edge.** From idle (`busy` = 0), the first trigger in cycle *f*
+    leaves `busy` = 0 in cycle *f* and makes it 1 from cycle *f* + 1.
+  - **Falling edge.** After the last trigger, in cycle *l*, `busy` = 1 in
+    cycles *l* + 1 to *l* + 4. From *l* + 5 on it is 0, if that slot left
+    no NOP slots and `loop_active` = 0. Otherwise it stays 1 until reset:
+    a run cut off inside a NOP or a loop keeps the unit busy, and the host
+    can't write configuration until it resets the unit or sends the rest
+    of the slots. The edge that ends a cycle with `rst_n` = 0 clears every
+    term ([TOP-IF-4]), so `busy` = 0 from the next cycle.
+  - It doesn't depend on what the slots issue, only on the trigger
+    sequence, the NOP slots left and the loop state.
+
+  **Consistency with [TOP-IF-8].** A configuration write takes effect only
+  in a cycle with `busy` = 0 and `trig_valid` = 0. That is a cycle with no
+  entry anywhere in S1 to S5, no NOP slots left and `loop_active` = 0. In
+  particular no S5 write is in that cycle ([TOP-HIER-6]), and no program
+  is part-way through. Counting an entry in S1 in `busy` as well (option
+  (1b) below) would accept exactly the same writes, since `trig_valid` is
+  in the condition already. The script checks both over 142160 random
+  cycles.
+
+  Options weighed:
+  - **(1) The trigger's own cycle.** (a) `busy` from registers only, rising
+    the cycle after the first trigger (chosen). (b) `busy` also 1 in the
+    trigger's cycle, combinational from `trig_valid` (draft 0.1 read
+    literally, "valid in S1"). They differ only in cycle *f* of case P
+    below. (b) puts a path from an input to an output through the unit, which
+    the host's timing has to close in the same cycle, and gains nothing for
+    [TOP-IF-8].
+  - **(2) Which entries count.** (a) every slot (chosen). (b) only entries
+    that write a register file or the bank, so NOP slots, illegal words and
+    EXIT end `busy` early. Under (b) the falling edge depends on what the
+    last slots decode to, and `pcu_datapath` would need a write flag per
+    stage just for `busy`. Under (a) it depends on the trigger sequence
+    alone, and DV predicts it without decoding. In case S below (b) falls 3
+    cycles sooner, and in the script's random runs by up to 15 cycles (a
+    trailing run of slots that write nothing). (a) costs up to 4 cycles
+    before the host may write, after each run.
+  - **(3) The last NOP slot.** It still counts as "slots left" in its own
+    cycle (chosen). Under (2a) this changes nothing, since that slot's
+    entry keeps `busy` = 1 for the next 4 cycles anyway. It is stated so
+    that the NOP term is a plain "counter ≠ 0".
+
+  The papers have no `busy` output: their host keeps to fixed command
+  timing. ANEMOS has none either: its interface unit drives only
+  `decode_en` and `rf_access` (`interface_unit.cpp`, at `f2d4018`; read,
+  not run).
+
+**Worked cases for [TOP-IF-7].** Generated by
+[examples/busy_trace.py](examples/busy_trace.py), which checks that these
+tables appear here word for word. "In S2 to S5" lists the entries by the PC
+of their slot. "NOP slots left" and `loop_active` are the values during the
+cycle. `busy` is the chosen rule; (1b) and (2b) are the options above. The
+last column is what [TOP-IF-8] does with a configuration write in that
+cycle.
+
+*Case P: rise and fall.* Idle in cycle 1, triggers in cycles 2 and 3:
+
+```
+PC 0  MOV GRF_A[0], EVEN_BANK
+PC 1  EXIT
+```
+
+| Cycle | `trig_valid` | Slot issued (S1) | In S2 to S5 | NOP slots left | `loop_active` | `busy` | (1b) | configuration write |
+|---|---|---|---|---|---|---|---|---|
+| 1 | 0 | – | – | 0 | 0 | **0** | 0 | takes effect |
+| 2 | 1 | PC 0 MOV GRF_A[0], EVEN_BANK | – | 0 | 0 | **0** | 1 | ignored |
+| 3 | 1 | PC 1 EXIT | S2: PC 0 | 0 | 0 | **1** | 1 | ignored |
+| 4 | 0 | – | S2: PC 1, S3: PC 0 | 0 | 0 | **1** | 1 | ignored |
+| 5 | 0 | – | S3: PC 1, S4: PC 0 | 0 | 0 | **1** | 1 | ignored |
+| 6 | 0 | – | S4: PC 1, S5: PC 0 | 0 | 0 | **1** | 1 | ignored |
+| 7 | 0 | – | S5: PC 1 | 0 | 0 | **1** | 1 | ignored |
+| 8 | 0 | – | – | 0 | 0 | **0** | 0 | takes effect |
+| 9 | 0 | – | – | 0 | 0 | **0** | 0 | takes effect |
+
+`busy` rises in cycle 3, the cycle after the first trigger, and falls in
+cycle 8 = 3 + 5, after EXIT's entry leaves S5. Under (1b) it would rise in
+cycle 2. Either way the configuration write is ignored in cycle 2, because
+`trig_valid` = 1.
+
+![Case P: busy rises the cycle after the first trigger and falls 5 cycles after the last](img/busy_rise_fall.svg)
+
+*Figure 1: case P, [TOP-IF-7] and [TOP-IF-8]. "PC 0 MOV" is
+`MOV GRF_A[0], EVEN_BANK`. The first trigger is in cycle 2
+(marker a) and `busy` rises in cycle 3 (marker b). EXIT, the last slot, is
+issued in cycle 3 and is in S5 in cycle 7. `busy` falls in cycle 8 (marker c),
+the first cycle in which a configuration write takes effect. Source:
+[busy_rise_fall.wave.json](img/busy_rise_fall.wave.json).*
+
+*Case Q: bubbles inside a NOP.* The ADD in cycle 1, the NOP's first slot in
+cycle 2, no triggers in cycles 3 to 8, its other two slots in cycles 9 and
+10, and EXIT in cycle 11:
+
+```
+PC 0  ADD GRF_A[0], GRF_A[1], SRF_A[0]
+PC 1  NOP 3
+PC 2  EXIT
+```
+
+| Cycle | `trig_valid` | Slot issued (S1) | In S2 to S5 | NOP slots left | `loop_active` | `busy` | (1b) | configuration write |
+|---|---|---|---|---|---|---|---|---|
+| 1 | 1 | PC 0 ADD GRF_A[0], GRF_A[1], SRF_A[0] | – | 0 | 0 | **0** | 1 | ignored |
+| 2 | 1 | PC 1 NOP 3 | S2: PC 0 | 0 | 0 | **1** | 1 | ignored |
+| 3 | 0 | – | S2: PC 1, S3: PC 0 | 2 | 0 | **1** | 1 | ignored |
+| 4 | 0 | – | S3: PC 1, S4: PC 0 | 2 | 0 | **1** | 1 | ignored |
+| 5 | 0 | – | S4: PC 1, S5: PC 0 | 2 | 0 | **1** | 1 | ignored |
+| 6 | 0 | – | S5: PC 1 | 2 | 0 | **1** | 1 | ignored |
+| 7 | 0 | – | – | 2 | 0 | **1** | 1 | ignored |
+| 8 | 0 | – | – | 2 | 0 | **1** | 1 | ignored |
+| 9 | 1 | PC 1 NOP slot | – | 2 | 0 | **1** | 1 | ignored |
+| 10 | 1 | PC 1 NOP slot | S2: PC 1 | 1 | 0 | **1** | 1 | ignored |
+| 11 | 1 | PC 2 EXIT | S2: PC 1, S3: PC 1 | 0 | 0 | **1** | 1 | ignored |
+| 12 | 0 | – | S2: PC 2, S3: PC 1, S4: PC 1 | 0 | 0 | **1** | 1 | ignored |
+| 13 | 0 | – | S3: PC 2, S4: PC 1, S5: PC 1 | 0 | 0 | **1** | 1 | ignored |
+| 14 | 0 | – | S4: PC 2, S5: PC 1 | 0 | 0 | **1** | 1 | ignored |
+| 15 | 0 | – | S5: PC 2 | 0 | 0 | **1** | 1 | ignored |
+| 16 | 0 | – | – | 0 | 0 | **0** | 0 | takes effect |
+
+In cycles 7 and 8 no entry is in the pipeline, and only the NOP's slots
+left keep `busy` = 1. In cycle 10, the NOP's last slot, it still has that
+slot left (option (3)). A loop works the same way: `loop_active` = 1 holds
+`busy` through the bubbles (case R of the script).
+
+*Case S: where option (2b) differs.* Triggers in cycles 1 to 4:
+
+```
+PC 0  MOV GRF_B[0], GRF_A[0]
+PC 1  NOP 2
+PC 2  EXIT
+```
+
+| Cycle | `trig_valid` | Slot issued (S1) | In S2 to S5 | NOP slots left | `loop_active` | `busy` | (1b) | (2b) | configuration write |
+|---|---|---|---|---|---|---|---|---|---|
+| 1 | 1 | PC 0 MOV GRF_B[0], GRF_A[0] | – | 0 | 0 | **0** | 1 | 0 | ignored |
+| 2 | 1 | PC 1 NOP 2 | S2: PC 0 | 0 | 0 | **1** | 1 | 1 | ignored |
+| 3 | 1 | PC 1 NOP slot | S2: PC 1, S3: PC 0 | 1 | 0 | **1** | 1 | 1 | ignored |
+| 4 | 1 | PC 2 EXIT | S2: PC 1, S3: PC 1, S4: PC 0 | 0 | 0 | **1** | 1 | 1 | ignored |
+| 5 | 0 | – | S2: PC 2, S3: PC 1, S4: PC 1, S5: PC 0 | 0 | 0 | **1** | 1 | 1 | ignored |
+| 6 | 0 | – | S3: PC 2, S4: PC 1, S5: PC 1 | 0 | 0 | **1** | 1 | 0 | ignored |
+| 7 | 0 | – | S4: PC 2, S5: PC 1 | 0 | 0 | **1** | 1 | 0 | ignored |
+| 8 | 0 | – | S5: PC 2 | 0 | 0 | **1** | 1 | 0 | ignored |
+| 9 | 0 | – | – | 0 | 0 | **0** | 0 | 0 | takes effect |
+
+The MOV, the only slot with a write, leaves S5 after cycle 5. Under (2b)
+`busy` falls in cycle 6, and the configuration write column would read
+"takes effect" from there. Under the chosen rule it falls in cycle 9 = 4 + 5.
+
+The script also runs 5000 random programs of 2 to 10 words, with random
+triggers and resets (seed 24). In every cycle the chosen `busy` and (1b)
+accept the same configuration writes. No accepted cycle has an entry in S5,
+NOP slots left or `loop_active` = 1. Every trigger outside reset makes exactly
+one entry, and every run follows the falling-edge rule above. Rerun from the
+repo root: `.venv/bin/python src/top/doc/examples/busy_trace.py` (output
+[examples/busy_trace.out](examples/busy_trace.out); exits non-zero if a
+check fails or a table here differs from the script's).
+
+**Timing diagrams.** Figure 1 above shows `busy` (case P), and Figure 2 in
+the [theory of operation](theory_of_operation.md#why-the-distance-is-4)
+shows a bank store and a load of its column on the same edge (case E,
+[TOP-IF-2], [TOP-IF-3]). They are drawn from the spec. Waveforms of the RTL
+doing the same belong on the designer's and DV's review pages.
 
 ## Register-file access through the ports
 

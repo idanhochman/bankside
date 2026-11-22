@@ -684,7 +684,7 @@ the violation too:
 | Rule | Outcome when broken | Flagged in hardware |
 |---|---|---|
 | [TOP-HAZ-3] | the read returns the newest value written by S5 up to its cycle ([TOP-HAZ-5]) | no |
-| [TOP-HAZ-6] | the bank read returns the old data ([TOP-HAZ-6]) | no |
+| [TOP-HAZ-6] | the bank read returns the newest store to its column whose S5 cycle is the read's S1 cycle or earlier ([TOP-HAZ-7]) | no |
 | [TOP-ISA-6] | one loop state for all JUMPs ([TOP-ISA-28]) | no |
 | [TOP-ISA-7] | the second JUMP waits one `NOP 1` slot ([TOP-ISA-27]) | no |
 | [TOP-ISA-14] | the JUMP is illegal: a one-slot NOP ([TOP-ISA-26]) | yes, `err_illegal` |
@@ -738,6 +738,9 @@ each next to its rule. The FP16 ones are in the
 | Register files on reset | [TOP-ARCH-5], [TOP-ARCH-9] | kept; never-written entries hold an unpredicted power-up value | cleared to 0 |
 | A read in the cycle its entry is written | [TOP-HAZ-1] | write-through: the new value | the stored, old value (its gap slots differ anyway, [TOP-HAZ-3]) |
 | GRF_B read ports | [TOP-ARCH-10] | 3: the MAC accumulator has its own | 2: the accumulator's index is ORed into port 1's, so a GRF_B read through port 1 in the same cycle reads the ORed index |
+| When MOV and bank stores write | [TOP-PIPE-1] | in S5, like every other write: at most one write per cycle, in program order | a MOV from a register, and a bank store, write in the cycle they are decoded; bank loads and arithmetic through its write pipeline |
+| Bank read after a bank store to the same column | [TOP-HAZ-6] | at least 4 slots apart (v1 bank, write first on the same edge) | the store is driven on the bank bus in its own command's cycle; when a later read sees it depends on ANEMOS's DRAM side, outside its unit (not checked) |
+| `busy` output | [TOP-IF-7] | 1 from the cycle after a trigger until 4 cycles after the last one, longer inside a NOP or a loop | none |
 
 Same in both, so nothing to mask: the opcode and operand codes, the loop
 state's transitions for a JUMP with IMM1 ≥ 1 ([TOP-ISA-3]), the PC wrap

@@ -1,0 +1,13 @@
+{
+  "signal": [
+    {"name": "clk", "wave": "p........"},
+    {"name": "trig_valid", "wave": "01.0.....", "node": ".a......."},
+    {"name": "busy", "wave": "0.1....0.", "node": "..b....c."},
+    {},
+    {"name": "PC 0 MOV", "wave": "x=====x..", "data": ["S1", "S2", "S3", "S4", "S5"]},
+    {"name": "PC 1 EXIT", "wave": "x.=====x.", "data": ["S1", "S2", "S3", "S4", "S5"]}
+  ],
+  "edge": ["a~>b"],
+  "head": {"tick": 1},
+  "config": {"hscale": 2}
+}

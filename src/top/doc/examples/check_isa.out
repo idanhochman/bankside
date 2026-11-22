@@ -94,10 +94,10 @@ ok   5 52 example lines assemble and decode back; 49 legal, 3 illegal as marked
 ok   8 ANEMOS layout table == opcodes.h (anemos_ctrl.out) and yaml; 3 translated words
        ARCH [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
        FP   [1, 2, 3, 4, 5, 6, 7, 8, 9]
-       HAZ  [1, 2, 3, 4, 5, 6]
+       HAZ  [1, 2, 3, 4, 5, 6, 7]
        HIER [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
        IF   [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
        ISA  [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30]
-       PIPE [1, 2, 3]
-ok   6 80 IDs, each defined once; all references defined
-ok   7 101 relative links resolve
+       PIPE [1, 2, 3, 4]
+ok   6 82 IDs, each defined once; all references defined
+ok   7 113 relative links resolve
