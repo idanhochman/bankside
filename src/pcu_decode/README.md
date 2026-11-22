@@ -1,6 +1,7 @@
 # pcu_decode
 
-<!-- One or two lines: what this module does. The architect fills this in. -->
+Combinational instruction decoder: one 32-bit word to its illegal flag, its bank read and the
+decoded instruction `dec_instr_t` that `pcu_ctrl` issues to `pcu_datapath`. Spec: [doc/](doc/README.md).
 
 - **Requirement ID prefix:** `DEC` (e.g. `[DEC-1]`). Never reused.
 - **Parent:** [pcu_ctrl](../pcu_ctrl/doc/), whose doc describes how this module connects
