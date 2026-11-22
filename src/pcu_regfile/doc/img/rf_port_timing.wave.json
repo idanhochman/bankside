@@ -1,0 +1,21 @@
+{
+  "signal": [
+    {"name": "clk", "wave": "p....."},
+    {},
+    {"name": "wr_en", "wave": "010101", "node": ".a.c.e"},
+    {"name": "wr_idx", "wave": "x=x==.", "data": ["1", "2", "1"]},
+    {"name": "wr_data", "wave": "x=x===", "data": ["0x3C00", "0x4000", "0x4200", "0x4400"]},
+    {},
+    {"name": "rd_idx[0]", "wave": "=.....", "data": ["1"]},
+    {"name": "rd_data[0]", "wave": "==...=", "data": ["P1", "0x3C00", "0x4400"], "node": ".b...f"},
+    {},
+    {"name": "dbg_idx", "wave": "=.=..=", "data": ["1", "2", "1"]},
+    {"name": "dbg_data", "wave": "====.=", "data": ["P1", "0x3C00", "P2", "0x4000", "0x4400"], "node": "...d.g"},
+    {},
+    {"name": "entry[1] (internal)", "wave": "=.=...", "data": ["P1", "0x3C00"]},
+    {"name": "entry[2] (internal)", "wave": "=...=.", "data": ["P2", "0x4000"]}
+  ],
+  "edge": ["a~>b", "c~>d", "e~>f", "e~>g"],
+  "head": {"tick": 0},
+  "config": {"hscale": 2}
+}
