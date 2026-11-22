@@ -46,16 +46,21 @@ register files. **[bankside]** throughout, unless marked.
 
 ## Timing
 
-- **[TOP-IF-1]** A cycle with `trig_valid = 1` is one issue slot. The instruction
-  at the PC enters S1 in that cycle (or, during a multi-cycle NOP, one NOP slot
-  is consumed). Either way the slot is one pipeline entry that travels down
-  S1 to S5 ([TOP-PIPE-4]).
+- **[TOP-IF-1]** A cycle with `trig_valid = 1` and `rst_n = 1` is one issue
+  slot. The instruction at the PC enters S1 in that cycle (or, during a
+  multi-cycle NOP, one NOP slot is consumed). Either way the slot is one
+  pipeline entry that travels down S1 to S5 ([TOP-PIPE-4]). A trigger in a
+  cycle with `rst_n = 0` is ignored: it is not a slot, it requests no bank
+  read ([TOP-IF-2]) and sets nothing, and the next slot after the reset
+  fetches CRF[0]. **[bankside]** (#41; `pcu_ctrl`'s doc,
+  [state and reset](../../pcu_ctrl/doc/README.md#state-and-reset)).
 - **[TOP-IF-2]** **Bank read.** In the S1 cycle of an instruction with a
   bank source, the unit drives `bank_rd_en` = 1, `bank_rd_sel` (the bank
   the source names) and `bank_rd_row`, `bank_rd_col` (its trigger's,
   [TOP-ARCH-6]). These are combinational from `trig_*` and the fetched
-  word, since S1 is the trigger's own cycle. In every other cycle
-  `bank_rd_en` = 0 and the other `bank_rd_*` outputs are don't-care. The
+  word, since S1 is the trigger's own cycle. In every other cycle,
+  a cycle with `rst_n` = 0 included ([TOP-IF-1]), `bank_rd_en` = 0 and the
+  other `bank_rd_*` outputs are don't-care. The
   bank samples them at the end of that cycle and must drive `bank_rd_data`
   for the whole of the next cycle (S2), like a synchronous SRAM with one
   cycle of read latency. The data is the column's contents after any store
@@ -76,7 +81,9 @@ register files. **[bankside]** throughout, unless marked.
 - **[TOP-IF-4]** **Reset.** On `rst_n = 0`: PC ← 0, the loop state
   (`loop_active`, `loop_cnt`, [TOP-ISA-3]) and the NOP counter cleared,
   all pipeline stages invalid, `err_illegal` ← 0. Register files keep their
-  contents ([TOP-ARCH-5]).
+  contents ([TOP-ARCH-5]). These values win over every other update at the
+  same edge: an illegal word at the PC in a reset cycle doesn't set
+  `err_illegal`. **[bankside]** (#41)
 - **[TOP-IF-5]** **Configuration writes** take effect at the end of the cycle.
   `dbg_rd_data` shows the written value already in the cycle of the write,
   through write-through ([TOP-IF-12]), and from the stored entry from the

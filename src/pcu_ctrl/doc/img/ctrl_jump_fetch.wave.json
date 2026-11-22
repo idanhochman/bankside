@@ -1,0 +1,30 @@
+{
+  "signal": [
+    {"name": "clk", "wave": "p....."},
+    {"name": "trig_valid", "wave": "1...0."},
+    {"name": "trig_col", "wave": "====x.", "data": ["1", "2", "3", "4"]},
+    {},
+    ["fetch",
+      {"name": "pc (internal)", "wave": "==..=.", "data": ["0", "1", "0"]},
+      {"name": "crf_rd_idx[0]", "wave": "==..=.", "data": ["0", "1", "0"]},
+      {"name": "crf_rd_data[0]", "wave": "==..=.", "data": ["MOV", "JUMP", "MOV"], "node": ".a...."},
+      {"name": "crf_rd_idx[1]", "wave": "x=.=x.", "data": ["0", "2"]},
+      {"name": "crf_rd_data[1]", "wave": "x=.=x.", "data": ["MOV", "EXIT"], "node": ".b.d.."}
+    ],
+    {},
+    ["bank read",
+      {"name": "bank_rd_en", "wave": "1..0..", "node": ".c...."},
+      {"name": "bank_rd_col", "wave": "===x..", "data": ["1", "2", "3"]}
+    ],
+    {},
+    ["state",
+      {"name": "loop_active (internal)", "wave": "0.1.0.", "node": "....e."},
+      {"name": "loop_cnt (internal)", "wave": "x.==x.", "data": ["1", "0"]},
+      {"name": "iss_valid", "wave": "01...0"},
+      {"name": "busy", "wave": "01...0"}
+    ]
+  ],
+  "edge": ["a~>b", "b~>c", "d~>e"],
+  "head": {"tick": 1},
+  "config": {"hscale": 2}
+}
