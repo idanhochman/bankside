@@ -1,0 +1,59 @@
+ok   1 262144 word classes (opcode, DST, SRC0, SRC1, SRC2, A, R): illegal, bank read and fields == check_isa; every legal word assembles back to the same decode
+ok   2 784 legal combinations x every index value: 379904 words == check_isa
+ok   3 unused bits: 35840 words on the legal combinations (data bits [0, 1, 2, 3, 7, 11, 13, 14], ALU bits [3, 7, 11, 13, 14]); 1574400 NOP/JUMP/EXIT words; 200000 random words
+ok   4 DEC_NOP; MAC SRC2 ignored (8 values, one output); MAD SRC2 legal only as SRF_A; MAC/MAD/MUL source pairs equal (16); at most one bank source
+| # | Word | Instruction | `illegal` | `bank_rd`, `bank_sel` | `op` | `dst` | `src0` | `src1` | `dst_idx`, `src0_idx`, `src1_idx` | `relu` | `dec_instr` | Shows |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 1 | `0x00000000` | `NOP 0` | 0 | 0, 0 | NONE | 0 | 0 | 0 | 0, 0, 0 | 0 | `0x000000` | [DEC-14]: the word 0, `DEC_NOP` |
+| 2 | `0x00002FFF` | `NOP 5`, IMM1 = 2047 | 0 | 0, 0 | NONE | 0 | 0 | 0 | 0, 0, 0 | 0 | `0x000000` | [DEC-6]: IMM1 ignored ([TOP-ISA-25]) |
+| 3 | `0x10002801` | `JUMP -5, 1` | 0 | 0, 0 | NONE | 0 | 0 | 0 | 0, 0, 0 | 0 | `0x000000` | [DEC-6]: legal here; out of range at PC 2 to 4, which `pcu_ctrl` checks |
+| 4 | `0x10000000` | `JUMP -0, 0` (IMM0 = 0) | 0 | 0, 0 | NONE | 0 | 0 | 0 | 0, 0, 0 | 0 | `0x000000` | [DEC-6]: legal here; out of range at every PC ([TOP-ISA-26]) |
+| 5 | `0x2007FFFF` | `EXIT`, IMM0 = 255, IMM1 = 2047 | 0 | 0, 0 | NONE | 0 | 0 | 0 | 0, 0, 0 | 0 | `0x000000` | [DEC-6]: IMM0 and IMM1 ignored ([TOP-ISA-25]) |
+| 6 | `0x30000000` | opcode 3 | 1 | 0, 0 | NONE | 0 | 0 | 0 | 0, 0, 0 | 0 | `0x000000` | [DEC-5]: reserved opcode |
+| 7 | `0xFFFFFFFF` | opcode 15, every other bit 1 | 1 | 0, 0 | NONE | 0 | 0 | 0 | 0, 0, 0 | 0 | `0x000000` | [DEC-5]: reserved opcode |
+| 8 | `0x41000000` | `MOV GRF_A[0], EVEN_BANK` | 0 | 1, 0 (EVEN) | MOV | GRF_A | EVEN_BANK | 0 | 0, 0, 0 | 0 | `0x088000` | [DEC-10]: a bank load |
+| 9 | `0x41001350` | `MOV(RELU) GRF_A[3], EVEN_BANK`, SRC0# = 5 | 0 | 1, 0 (EVEN) | MOV | GRF_A | EVEN_BANK | 0 | 3, 0, 0 | 1 | `0x088181` | [DEC-13]: a bank's index is 0 ([TOP-ISA-9]) |
+| 10 | `0x4A400620` | `MOV ODD_BANK, GRF_B[2]`, DST# = 6 | 0 | 0, 0 | MOV | ODD_BANK | GRF_B | 0 | 0, 2, 0 | 0 | `0x0D2020` | [DEC-10]: a store is not a read; DST# 0 ([TOP-ISA-9]) |
+| 11 | `0x44008217` | `MOV SRF_M[2], GRF_A[1]`, bits 15 and 2–0 set | 0 | 0, 0 | MOV | SRF_M | GRF_A | 0 | 2, 1, 0 | 0 | `0x0A0110` | [DEC-6]: unused bits ([TOP-ISA-1]) |
+| 12 | `0x53401400` | `FILL GRF_B[4], ODD_BANK`, R = 1 | 0 | 1, 1 (ODD) | FILL | GRF_B | ODD_BANK | 0 | 4, 0, 0 | 0 | `0x11A200` | [DEC-13]: R of FILL is 0 ([TOP-ISA-16]) |
+| 13 | `0x43000000` | `MOV GRF_B[0], EVEN_BANK` | 1 | 0, 0 | NONE | 0 | 0 | 0 | 0, 0, 0 | 0 | `0x000000` | [DEC-7]: a crossed pair ([TOP-ISA-15]) |
+| 14 | `0x41800000` | `MOV GRF_A[0], GRF_B[0]`, SRC0 = 6 | 1 | 0, 0 | NONE | 0 | 0 | 0 | 0, 0, 0 | 0 | `0x000000` | [DEC-5]: a reserved code in a checked field |
+| 15 | `0x40780000` | `MOV GRF_A[0], GRF_B[0]`, SRC1 = 7 | 0 | 0, 0 | MOV | GRF_A | GRF_B | 0 | 0, 0, 0 | 0 | `0x082000` | [DEC-6]: MOV has no SRC1; bits 21–19 unused |
+| 16 | `0x811F0200` | `ADD GRF_A[2], EVEN_BANK, SRF_A[0]`, SRC2 = 7 | 0 | 1, 0 (EVEN) | ADD | GRF_A | EVEN_BANK | SRF_A | 2, 0, 0 | 0 | `0x188D00` | [DEC-6]: SRC2 ignored, even reserved ([TOP-ISA-10]) |
+| 17 | `0x81280000` | `ADD GRF_A[0], EVEN_BANK, ODD_BANK` | 1 | 0, 0 | NONE | 0 | 0 | 0 | 0, 0, 0 | 0 | `0x000000` | [DEC-7]: two bank sources ([TOP-ARCH-7]) |
+| 18 | `0x82D80101` | `ADD GRF_B[1], SRF_A[0], SRF_A[1]` | 1 | 0, 0 | NONE | 0 | 0 | 0 | 0, 0, 0 | 0 | `0x000000` | [DEC-7]: SRF_A read twice |
+| 19 | `0x80481012` | `ADD GRF_A[0], GRF_B[1], GRF_B[2]`, bit 12 set | 0 | 0, 0 | ADD | GRF_A | GRF_B | GRF_B | 0, 1, 2 | 0 | `0x182414` | [DEC-13]: bit 12 is unused in the ALU format, `relu` 0 |
+| 20 | `0x92100314` | `MUL GRF_B[3], GRF_A[1], SRF_M[4]` | 0 | 0, 0 | MUL | GRF_B | GRF_A | SRF_M | 3, 1, 4 | 0 | `0x210998` | [DEC-13]: every index used |
+| 21 | `0x92108314` | `MUL GRF_B[3], GRF_A[1], SRF_M[4]`, A = 1 | 1 | 0, 0 | NONE | 0 | 0 | 0 | 0, 0, 0 | 0 | `0x000000` | [DEC-5]: A = 1 in v1 |
+| 22 | `0xA0630015` | `MAD GRF_A[0], GRF_B[1], EVEN_BANK, SRF_A[5]` | 0 | 1, 0 (EVEN) | MAD | GRF_A | GRF_B | EVEN_BANK | 0, 1, 5 | 0 | `0x28301A` | [DEC-13]: MAD keeps SRC1# with a bank SRC1 ([TOP-ISA-20]) |
+| 23 | `0xA1110002` | `MAD GRF_A[0], EVEN_BANK, SRF_M[2], GRF_B[2]` | 1 | 0, 0 | NONE | 0 | 0 | 0 | 0, 0, 0 | 0 | `0x000000` | [DEC-7]: MAD's SRC2 must be SRF_A ([TOP-ISA-23]) |
+| 24 | `0xB3110000` | `MAC GRF_B[0], EVEN_BANK, SRF_M[0]` (SRC2 = 1, as assembled) | 0 | 1, 0 (EVEN) | MAC | GRF_B | EVEN_BANK | SRF_M | 0, 0, 0 | 0 | `0x318800` | [DEC-8] |
+| 25 | `0xB3100000` | the same, SRC2 = 0 | 0 | 1, 0 (EVEN) | MAC | GRF_B | EVEN_BANK | SRF_M | 0, 0, 0 | 0 | `0x318800` | [DEC-8]: the same output as 24 |
+| 26 | `0xB3170000` | the same, SRC2 = 7 | 0 | 1, 0 (EVEN) | MAC | GRF_B | EVEN_BANK | SRF_M | 0, 0, 0 | 0 | `0x318800` | [DEC-8]: the same output as 24 |
+| 27 | `0xB0210010` | `MAC GRF_A[0], GRF_A[1], EVEN_BANK` | 1 | 0, 0 | NONE | 0 | 0 | 0 | 0, 0, 0 | 0 | `0x000000` | [DEC-7]: MAC writes GRF_B only ([TOP-ISA-21]) |
+| 28 | `0xB2010012` | `MAC GRF_B[0], GRF_A[1], GRF_A[2]` | 0 | 0, 0 | MAC | GRF_B | GRF_A | GRF_A | 0, 1, 2 | 0 | `0x310014` | [DEC-7]: a same-file pair ([TOP-ISA-22]) |
+| Opcode | Instruction | Classes | Legal | Legal operand combinations | Reserved opcode | A = 1 | Reserved code in a checked field | MAD SRC2 not SRF_A | Combination not listed |
+|---|---|---|---|---|---|---|---|---|---|
+| 0 | NOP | 16384 | 16384 | – | 0 | 0 | 0 | 0 | 0 |
+| 1 | JUMP | 16384 | 16384 | – | 0 | 0 | 0 | 0 | 0 |
+| 2 | EXIT | 16384 | 16384 | – | 0 | 0 | 0 | 0 | 0 |
+| 3 | reserved | 16384 | 0 | – | 16384 | 0 | 0 | 0 | 0 |
+| 4 | MOV | 16384 | 5120 | 20 | 0 | 0 | 7168 | 0 | 4096 |
+| 5 | FILL | 16384 | 1024 | 4 | 0 | 0 | 7168 | 0 | 8192 |
+| 6 | reserved | 16384 | 0 | – | 16384 | 0 | 0 | 0 | 0 |
+| 7 | reserved | 16384 | 0 | – | 16384 | 0 | 0 | 0 | 0 |
+| 8 | ADD | 16384 | 640 | 40 | 0 | 8192 | 4736 | 0 | 2816 |
+| 9 | MUL | 16384 | 512 | 32 | 0 | 8192 | 4736 | 0 | 2944 |
+| 10 | MAD | 16384 | 64 | 32 | 0 | 8192 | 5600 | 2160 | 368 |
+| 11 | MAC | 16384 | 256 | 16 | 0 | 8192 | 4736 | 0 | 3200 |
+| 12 | reserved | 16384 | 0 | – | 16384 | 0 | 0 | 0 | 0 |
+| 13 | reserved | 16384 | 0 | – | 16384 | 0 | 0 | 0 | 0 |
+| 14 | reserved | 16384 | 0 | – | 16384 | 0 | 0 | 0 | 0 |
+| 15 | reserved | 16384 | 0 | – | 16384 | 0 | 0 | 0 | 0 |
+| all | | 262144 | 56768 | 144 | 114688 | 32768 | 34144 | 2160 | 21616 |
+| Case | Word with the ignored field set | The assembler's word | (a) canonical: same `dec_instr`? | (b) raw fields: same `dec_instr`? |
+|---|---|---|---|---|
+| 9 | `0x41001350` | `0x41001300` `MOV(RELU) GRF_A[3], EVEN_BANK` | yes (`0x088181`) | no (`0x0881D1` vs `0x088181`) |
+| 10 | `0x4A400620` | `0x4A400020` `MOV ODD_BANK, GRF_B[2]` | yes (`0x0D2020`) | no (`0x0D2320` vs `0x0D2020`) |
+| 12 | `0x53401400` | `0x53400400` `FILL GRF_B[4], ODD_BANK` | yes (`0x11A200`) | no (`0x11A201` vs `0x11A200`) |
+ok   5 worked-word, class-count and choice tables == doc; dec_instr_t.reg.json and the layout and enum tables == [DEC-11], [DEC-12]
