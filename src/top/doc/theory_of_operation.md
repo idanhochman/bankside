@@ -37,14 +37,15 @@ The blocks below are split into modules in [hierarchy.md](hierarchy.md).
 
 | Register file | Size | Read ports | Notes |
 |---|---|---|---|
-| CRF | 32 × 32-bit | 1 (fetch) | The microkernel. **[paper]** |
+| CRF | 32 × 32-bit | 2 (S1: fetch, and the word a JUMP leads to) | The microkernel. **[paper]** |
 | GRF_A | 8 × 256-bit | 2 (S2) | Paired with the even bank. **[paper]** |
 | GRF_B | 8 × 256-bit | 2 (S2) + 1 (S4, accumulator) | Paired with the odd bank; MAC accumulates here. **[paper]** |
 | SRF_M | 8 × 16-bit | 1 (S2) | Scalar multiplier operand, broadcast to all 16 lanes. **[paper]** |
 | SRF_A | 8 × 16-bit | 1 (S2) | Scalar addend, broadcast to all 16 lanes. **[paper]** |
 
-The sizes are **[paper]**. The read-port counts are **[bankside]**: they
-follow from the legal operand combinations ([TOP-ARCH-10]). Each file also has
+The sizes are **[paper]**. The read-port counts are **[bankside]**: for
+the GRFs and SRFs they follow from the legal operand combinations
+([TOP-ARCH-10]), for the CRF from the zero-slot JUMP ([TOP-ISA-4]). Each file also has
 one debug read port, which the synthesis wrapper ties off ([TOP-HIER-7]).
 
 - **[TOP-ARCH-4]** Each register file has one write port, used by stage S5 and, when
@@ -114,12 +115,16 @@ one debug read port, which the synthesis wrapper ties off ([TOP-HIER-7]).
   the same in every run. Random values, with a new seed per run, are the
   ones no test can come to depend on.
 - **[TOP-ARCH-10]** **Read ports.** The functional read ports are those of
-  the table: CRF 1 (fetch), GRF_A 2 (S2), GRF_B 3 (2 in S2, 1 in S4 for the
+  the table: CRF 2 (S1), GRF_A 2 (S2), GRF_B 3 (2 in S2, 1 in S4 for the
   MAC accumulator), SRF_M 1 (S2), SRF_A 1 (S2). For each GRF and SRF the
   count is the most entries of that file one legal instruction reads in S2
   plus the most read in S4, since different instructions are in S2 and S4 in
-  the same cycle. Every read port is write-through ([TOP-HAZ-1]). The CRF's
-  count belongs to `pcu_ctrl`'s doc (#27). **[bankside]**
+  the same cycle. Every read port is write-through ([TOP-HAZ-1]). The CRF
+  needs 2 because a slot that resolves a JUMP reads the JUMP and the word it
+  leads to in the same cycle, and [TOP-ISA-27] keeps it from needing a
+  third; the fetch is defined in
+  [`pcu_ctrl`'s doc](../../pcu_ctrl/doc/README.md#fetch-and-the-zero-slot-jump)
+  (#27). **[bankside]**
   The counts are computed from the yaml by
   [examples/regfile_ports.py](examples/regfile_ports.py)
   ([hierarchy.md](hierarchy.md#worked-case-read-ports-from-the-yaml)): GRF_B's
@@ -156,7 +161,7 @@ what is read and written in each.
 
 | Stage | Name | What happens |
 |---|---|---|
-| S1 | Fetch/decode | Read CRF[PC] and decode. Resolve JUMP (zero slots). Issue the bank read request. |
+| S1 | Fetch/decode | Read CRF[PC] and decode. Resolve JUMP (zero slots): read the word it leads to in the same cycle. Issue the bank read request. |
 | S2 | Operand | Bank read data arrives. Read GRF/SRF source operands (everything except the MAC accumulator). MOV applies ReLU here when R = 1 (FILL ignores R, [TOP-ISA-16]). |
 | S3 | MULT | 16 FP16 multipliers (MUL, MAD, MAC). Other instructions pass through. |
 | S4 | ADD | 16 FP16 adders (ADD, MAD, MAC). MAC reads its accumulator here. Others pass through. |

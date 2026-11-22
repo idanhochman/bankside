@@ -1,0 +1,110 @@
+
+Case A: JUMP -1, 2: the JUMP's next word on port 1, in the same cycle
+
+    PC 0  0x41000000  MOV GRF_A[0], EVEN_BANK
+    PC 1  0x10000802  JUMP -1, 2
+    PC 2  0x20000000  EXIT
+
+| Cycle | `trig_valid` | `pc` | port 0: `crf_rd_idx[0]`: word | port 1: `crf_rd_idx[1]`: word | The slot issues | `bank_rd_en`, sel, col | `loop_active`, `loop_cnt` after | `pc` after |
+|---|---|---|---|---|---|---|---|---|
+| 1 | 1 | 0 | 0: MOV GRF_A[0], EVEN_BANK | – | PC 0 MOV GRF_A[0], EVEN_BANK | 1, EVEN, col 1 | 0, – | 1 |
+| 2 | 1 | 1 | 1: JUMP -1, 2 | 0: MOV GRF_A[0], EVEN_BANK | PC 0 MOV GRF_A[0], EVEN_BANK | 1, EVEN, col 2 | 1, 1 | 1 |
+| 3 | 1 | 1 | 1: JUMP -1, 2 | 0: MOV GRF_A[0], EVEN_BANK | PC 0 MOV GRF_A[0], EVEN_BANK | 1, EVEN, col 3 | 1, 0 | 1 |
+| 4 | 1 | 1 | 1: JUMP -1, 2 | 2: EXIT | PC 2 EXIT | 0 | 0, – | 0 |
+| 5 | 0 | 0 | 0: MOV GRF_A[0], EVEN_BANK | – | – | 0 | 0, – | 0 |
+| 6 | 0 | 0 | 0: MOV GRF_A[0], EVEN_BANK | – | – | 0 | 0, – | 0 |
+
+Case B: a JUMP right after a JUMP: port 1 returns a JUMP
+
+    PC 0  0x41000000  MOV GRF_A[0], EVEN_BANK
+    PC 1  0x10000801  JUMP -1, 1
+    PC 2  0x10001000  JUMP -2, 0
+    PC 3  0x20000000  EXIT
+
+| Cycle | `trig_valid` | `pc` | port 0: `crf_rd_idx[0]`: word | port 1: `crf_rd_idx[1]`: word | The slot issues | `bank_rd_en`, sel, col | `loop_active`, `loop_cnt` after | `pc` after |
+|---|---|---|---|---|---|---|---|---|
+| 1 | 1 | 0 | 0: MOV GRF_A[0], EVEN_BANK | – | PC 0 MOV GRF_A[0], EVEN_BANK | 1, EVEN, col 1 | 0, – | 1 |
+| 2 | 1 | 1 | 1: JUMP -1, 1 | 0: MOV GRF_A[0], EVEN_BANK | PC 0 MOV GRF_A[0], EVEN_BANK | 1, EVEN, col 2 | 1, 0 | 1 |
+| 3 | 1 | 1 | 1: JUMP -1, 1 | 2: JUMP -2, 0 | `NOP 1`: the JUMP at PC 2 waits ([TOP-ISA-27]) | 0 | 0, – | 2 |
+| 4 | 1 | 2 | 2: JUMP -2, 0 | 3: EXIT | PC 3 EXIT | 0 | 0, – | 0 |
+| 5 | 1 | 0 | 0: MOV GRF_A[0], EVEN_BANK | – | PC 0 MOV GRF_A[0], EVEN_BANK | 1, EVEN, col 5 | 0, – | 1 |
+
+Case C: bubbles, EXIT, a CRF write while idle, and the next run
+
+    PC 0  0x41000000  MOV GRF_A[0], EVEN_BANK
+    PC 1  0x10000801  JUMP -1, 1
+    PC 2  0x20000000  EXIT
+
+| Cycle | `trig_valid` | `pc` | port 0: word | port 1: word | The slot issues | `bank_rd_en`, sel, col | `busy` (top) | CRF write | (b): word in the read-ahead register |
+|---|---|---|---|---|---|---|---|---|---|
+| 1 | 1 | 0 | MOV GRF_A[0], EVEN_BANK | – | PC 0 MOV GRF_A[0], EVEN_BANK | 1, EVEN, col 1 | 0 | – | MOV GRF_A[0], EVEN_BANK |
+| 2 | 0 | 1 | JUMP -1, 1 | MOV GRF_A[0], EVEN_BANK | – | 0 | 1 | – | JUMP -1, 1 |
+| 3 | 1 | 1 | JUMP -1, 1 | MOV GRF_A[0], EVEN_BANK | PC 0 MOV GRF_A[0], EVEN_BANK | 1, EVEN, col 3 | 1 | – | JUMP -1, 1 |
+| 4 | 0 | 1 | JUMP -1, 1 | EXIT | – | 0 | 1 | – | JUMP -1, 1 |
+| 5 | 1 | 1 | JUMP -1, 1 | EXIT | PC 2 EXIT | 0 | 1 | – | JUMP -1, 1 |
+| 6 | 0 | 0 | MOV GRF_A[0], EVEN_BANK | – | – | 0 | 1 | – | MOV GRF_A[0], EVEN_BANK |
+| 7 | 0 | 0 | MOV GRF_A[0], EVEN_BANK | – | – | 0 | 1 | – | MOV GRF_A[0], EVEN_BANK |
+| 8 | 0 | 0 | MOV GRF_A[0], EVEN_BANK | – | – | 0 | 1 | – | MOV GRF_A[0], EVEN_BANK |
+| 9 | 0 | 0 | MOV GRF_A[0], EVEN_BANK | – | – | 0 | 1 | – | MOV GRF_A[0], EVEN_BANK |
+| 10 | 0 | 0 | MOV GRF_B[0], ODD_BANK | – | – | 0 | 0 | takes effect | MOV GRF_A[0], EVEN_BANK |
+| 11 | 1 | 0 | MOV GRF_B[0], ODD_BANK | – | PC 0 MOV GRF_B[0], ODD_BANK | 1, ODD, col 11 | 0 | – | MOV GRF_A[0], EVEN_BANK |
+
+Case D: triggers in cycles with rst_n = 0
+
+    PC 0  0x41000000  MOV GRF_A[0], EVEN_BANK
+    PC 1  0x30000000  illegal
+    PC 2  0x43400000  MOV GRF_B[0], ODD_BANK
+    PC 3  0x20000000  EXIT
+
+| Cycle | `rst_n` | `trig_valid` | `pc` | CRF[`pc`] | The slot issues | `bank_rd_en` (chosen) | `bank_rd_en` under (b) | `err_illegal` | `iss_valid` | `busy` (top) |
+|---|---|---|---|---|---|---|---|---|---|---|
+| 1 | 0 | 0 | 0 | MOV GRF_A[0], EVEN_BANK | – | 0 | 0 | 0 | 0 | 0 |
+| 2 | 1 | 1 | 0 | MOV GRF_A[0], EVEN_BANK | PC 0 MOV GRF_A[0], EVEN_BANK | 1, EVEN, col 2 | 1, EVEN, col 2 | 0 | 0 | 0 |
+| 3 | 1 | 1 | 1 | illegal | PC 1 illegal word | 0 | 0 | 0 | 1 | 1 |
+| 4 | 1 | 0 | 2 | MOV GRF_B[0], ODD_BANK | – | 0 | 0 | 1 | 1 | 1 |
+| 5 | 0 | 1 | 2 | MOV GRF_B[0], ODD_BANK | – | 0 | 1, ODD, col 5 | 1 | 0 | 1 |
+| 6 | 1 | 1 | 0 | MOV GRF_A[0], EVEN_BANK | PC 0 MOV GRF_A[0], EVEN_BANK | 1, EVEN, col 6 | 1, EVEN, col 6 | 0 | 0 | 0 |
+| 7 | 0 | 1 | 1 | illegal | – | 0 | 0 | 0 | 1 | 1 |
+| 8 | 1 | 0 | 0 | MOV GRF_A[0], EVEN_BANK | – | 0 | 0 | 0 | 0 | 0 |
+
+Case E: JUMP -5, 1 at PC 2, and err_illegal
+
+    PC 0  0x41000000  MOV GRF_A[0], EVEN_BANK
+    PC 1  0x43400000  MOV GRF_B[0], ODD_BANK
+    PC 2  0x10002801  JUMP -5, 1
+    PC 3  0x20000000  EXIT
+
+| Cycle | `trig_valid` | `pc` | port 0: word | IMM0 > `pc`? | port 1 | The slot issues | `bank_rd_en` | `err_illegal` | `loop_active` after |
+|---|---|---|---|---|---|---|---|---|---|
+| 1 | 1 | 0 | MOV GRF_A[0], EVEN_BANK | – | – | PC 0 MOV GRF_A[0], EVEN_BANK | 1 | 0 | 0 |
+| 2 | 1 | 1 | MOV GRF_B[0], ODD_BANK | – | – | PC 1 MOV GRF_B[0], ODD_BANK | 1 | 0 | 0 |
+| 3 | 1 | 2 | JUMP -5, 1 | 5 > 2: yes | – | PC 2 JUMP, illegal ([TOP-ISA-26]) | 0 | 0 | 0 |
+| 4 | 0 | 3 | EXIT | – | – | – | 0 | 1 | 0 |
+| 5 | 1 | 3 | EXIT | – | – | PC 3 EXIT | 0 | 1 | 0 |
+| 6 | 1 | 0 | MOV GRF_A[0], EVEN_BANK | – | – | PC 0 MOV GRF_A[0], EVEN_BANK | 1 | 1 | 0 |
+
+Case F: one trigger before a JUMP, chosen fetch against option (c)
+
+| Cycle | `trig_valid` | chosen: `pc` after | chosen: `loop_active` after | chosen: `busy` (top) | (c): `pc` after | (c): `loop_active` after | (c): `busy` (top) |
+|---|---|---|---|---|---|---|---|
+| 1 | 1 | 1 | 0 | 0 | 0 | 1 | 0 |
+| 2 | 0 | 1 | 0 | 1 | 0 | 1 | 1 |
+| 3 | 0 | 1 | 0 | 1 | 0 | 1 | 1 |
+| 4 | 0 | 1 | 0 | 1 | 0 | 1 | 1 |
+| 5 | 0 | 1 | 0 | 1 | 0 | 1 | 1 |
+| 6 | 0 | 1 | 0 | 0 | 0 | 1 | 1 |
+| 7 | 0 | 1 | 0 | 0 | 0 | 1 | 1 |
+| 8 | 0 | 1 | 0 | 0 | 0 | 1 | 1 |
+
+Figure 1: 78 cells checked against case A
+Range check: 24576 JUMP words, ILLJ exactly when check_isa.py's legal(word, pc) is false
+
+Random runs (seed 30): 4000 programs, 164554 cycles, 95309 slots, 4285 reset cycles
+  every slot == loop_trace.py's Unit (issued word, PC, loop state, NOP counter, err_illegal)
+  every cycle's busy == busy_trace.py's run() (the 2000 programs with legal JUMPs)
+  slots that resolved a JUMP and read CRF twice: 11623; held over ([TOP-ISA-27]): 2131, which would need a third read without the hold
+  illegal words: 11874, out-of-range JUMPs: 2779
+
+ANEMOS (anemos_ctrl.out, case A): EXIT on command 7, 3 of them JUMP fetches; pcu_ctrl: EXIT in slot 4, no slot for a JUMP
+
+ok   all cases match the doc
