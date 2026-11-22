@@ -1,0 +1,39 @@
+1. Select table ([TOP-IF-9]) from interfaces.md
+   0: GRF_A, 8 entries x 256 bits
+   1: GRF_B, 8 entries x 256 bits
+   2: SRF_M, 8 entries x 16 bits
+   3: SRF_A, 8 entries x 16 bits
+   4: none
+   5: none
+   6: none
+   7: CRF, 32 entries x 32 bits
+   codes 0-3 equal the yaml operand codes, entries and widths; 7 is the CRF (32 x 32)
+
+2. Every (cfg_wr_sel, cfg_wr_idx) written with cfg_wr_data = all ones, then read back
+   sel  file    writes taking effect   entries changed   dbg_rd_data for idx >= depth   high bits read
+   0    GRF_A   0-7                                  8   0                              0
+   1    GRF_B   0-7                                  8   0                              0
+   2    SRF_M   0-7                                  8   0                              0
+   3    SRF_A   0-7                                  8   0                              0
+   4    none    none                                 0   0                              0
+   5    none    none                                 0   0                              0
+   6    none    none                                 0   0                              0
+   7    CRF     0-31                                32   (none)                         0
+   (entries changed counts, over all 32 writes, the entries that differ afterwards in any file)
+   cfg_wr_sel = 5, idx 2: write reaches None; dbg_rd_sel = 5 reads 0x0
+   cfg_wr_sel = 2, idx 3, data all ones: SRF_M[3] = 0xffff; dbg_rd_data bits 15:0 = 0xffff, bits 255:16 = 0x0
+
+3. Where the out-of-range options differ: the host writes GRF_A index 9 (meant 1, a host bug)
+   (a) ignored, reads 0 (chosen)   GRF_A[1] 0x0001 -> 0x0001; dbg_rd_idx = 9 reads 0x0000
+   (b) index modulo depth          GRF_A[1] 0x0001 -> 0xabcd; dbg_rd_idx = 9 reads 0xabcd
+   Under (b) the bug overwrites GRF_A[1] and a check that reads index 9 back passes;
+   under (a) GRF_A[1] is untouched and the read-back of index 9 gives 0, so the test sees it.
+
+4. Debug read of GRF_B[0] in the cycle of a write to it (GRF_B[0] holds 0x0100 before)
+   write in cycle t                                               (a) write-through, chosen   (b) stored only   cycle t+1, both
+   S5 write of 0x7777 (a running program)                                            0x7777             0x100   0x7777
+   configuration write of 0x5555, busy = 0, trig_valid = 0                           0x5555             0x100   0x5555
+   configuration write of 0x5555, busy = 1 ([TOP-IF-8]: ignored)                       0x100             0x100   0x100
+   The options differ only in the cycle of the write; from t+1 on both show the stored value.
+
+ok   all checks pass

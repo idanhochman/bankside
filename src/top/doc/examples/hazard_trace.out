@@ -1,0 +1,122 @@
+1. Toy programs, traced (one trigger per cycle unless marked)
+
+Case A: [TOP-HAZ-3] at its limit, k = 3 slots
+    PC 0  MOV GRF_A[1], SRF_M[1]
+    PC 1  NOP 2
+    PC 2  ADD GRF_B[2], GRF_A[1], GRF_A[1]
+    initial: GRF_A[1] = 0.5, GRF_B[2] = 0.25, SRF_M[0] = 1.0, SRF_M[1] = 2.0, SRF_M[2] = 3.0
+  write-through on (chosen):
+    cycle  1 trigger  -
+    cycle  2 trigger  PC 0 S2 reads SRF_M[1] = 2.0
+    cycle  3 trigger  -
+    cycle  4 trigger  -
+    cycle  5 bubble   PC 2 S2 reads GRF_A[1] = 2.0 (write-through); PC 2 S2 reads GRF_A[1] = 2.0 (write-through); PC 0 S5 writes GRF_A[1] <- 2.0
+    cycle  6 bubble   -
+    cycle  7 bubble   -
+    cycle  8 bubble   PC 2 S5 writes GRF_B[2] <- 4.0
+  write-through off:
+    cycle  1 trigger  -
+    cycle  2 trigger  PC 0 S2 reads SRF_M[1] = 2.0
+    cycle  3 trigger  -
+    cycle  4 trigger  -
+    cycle  5 bubble   PC 2 S2 reads GRF_A[1] = 0.5; PC 2 S2 reads GRF_A[1] = 0.5; PC 0 S5 writes GRF_A[1] <- 2.0
+    cycle  6 bubble   -
+    cycle  7 bubble   -
+    cycle  8 bubble   PC 2 S5 writes GRF_B[2] <- 1.0
+  GRF_B[2]: in order 4.0, write-through 4.0, no write-through 1.0
+
+Case B: [TOP-HAZ-3] broken (k = 2 from PC 1), an older write (PC 0) in flight
+    PC 0  MOV GRF_A[1], SRF_M[0]
+    PC 1  MOV GRF_A[1], SRF_M[1]
+    PC 2  NOP 1
+    PC 3  ADD GRF_B[2], GRF_A[1], GRF_A[1]
+    initial: GRF_A[1] = 0.5, GRF_B[2] = 0.25, SRF_M[0] = 1.0, SRF_M[1] = 2.0, SRF_M[2] = 3.0
+  write-through on (chosen):
+    cycle  1 trigger  -
+    cycle  2 trigger  PC 0 S2 reads SRF_M[0] = 1.0
+    cycle  3 trigger  PC 1 S2 reads SRF_M[1] = 2.0
+    cycle  4 trigger  -
+    cycle  5 trigger  PC 3 S2 reads GRF_A[1] = 1.0 (write-through); PC 3 S2 reads GRF_A[1] = 1.0 (write-through); PC 0 S5 writes GRF_A[1] <- 1.0
+    cycle  6 bubble   PC 1 S5 writes GRF_A[1] <- 2.0
+    cycle  7 bubble   -
+    cycle  8 bubble   PC 3 S5 writes GRF_B[2] <- 2.0
+  write-through off:
+    cycle  1 trigger  -
+    cycle  2 trigger  PC 0 S2 reads SRF_M[0] = 1.0
+    cycle  3 trigger  PC 1 S2 reads SRF_M[1] = 2.0
+    cycle  4 trigger  -
+    cycle  5 trigger  PC 3 S2 reads GRF_A[1] = 0.5; PC 3 S2 reads GRF_A[1] = 0.5; PC 0 S5 writes GRF_A[1] <- 1.0
+    cycle  6 bubble   PC 1 S5 writes GRF_A[1] <- 2.0
+    cycle  7 bubble   -
+    cycle  8 bubble   PC 3 S5 writes GRF_B[2] <- 1.0
+  GRF_B[2]: in order 4.0, write-through 2.0 (reads PC 0's 1.0, not the 0.5 held before the program)
+
+Case C: program B with a bubble after PC 1 (k = 2 slots but 3 cycles)
+    PC 0  MOV GRF_A[1], SRF_M[0]
+    PC 1  MOV GRF_A[1], SRF_M[1]
+    PC 2  NOP 1
+    PC 3  ADD GRF_B[2], GRF_A[1], GRF_A[1]
+    initial: GRF_A[1] = 0.5, GRF_B[2] = 0.25, SRF_M[0] = 1.0, SRF_M[1] = 2.0, SRF_M[2] = 3.0
+  write-through on (chosen):
+    cycle  1 trigger  -
+    cycle  2 trigger  PC 0 S2 reads SRF_M[0] = 1.0
+    cycle  3 bubble   PC 1 S2 reads SRF_M[1] = 2.0
+    cycle  4 trigger  -
+    cycle  5 trigger  PC 0 S5 writes GRF_A[1] <- 1.0
+    cycle  6 bubble   PC 3 S2 reads GRF_A[1] = 2.0 (write-through); PC 3 S2 reads GRF_A[1] = 2.0 (write-through); PC 1 S5 writes GRF_A[1] <- 2.0
+    cycle  7 bubble   -
+    cycle  8 bubble   -
+    cycle  9 bubble   PC 3 S5 writes GRF_B[2] <- 4.0
+  write-through off:
+    cycle  1 trigger  -
+    cycle  2 trigger  PC 0 S2 reads SRF_M[0] = 1.0
+    cycle  3 bubble   PC 1 S2 reads SRF_M[1] = 2.0
+    cycle  4 trigger  -
+    cycle  5 trigger  PC 0 S5 writes GRF_A[1] <- 1.0
+    cycle  6 bubble   PC 3 S2 reads GRF_A[1] = 1.0; PC 3 S2 reads GRF_A[1] = 1.0; PC 1 S5 writes GRF_A[1] <- 2.0
+    cycle  7 bubble   -
+    cycle  8 bubble   -
+    cycle  9 bubble   PC 3 S5 writes GRF_B[2] <- 2.0
+  GRF_B[2]: in order 4.0, write-through 4.0 (the read meets PC 1's write: rule broken in slots, result still in order)
+
+Case D: [TOP-HAZ-4], MACs right after the producer of their accumulator
+    PC 0  MOV GRF_B[2], SRF_M[1]
+    PC 1  MAC GRF_B[2], GRF_A[1], SRF_M[0]
+    PC 2  MAC GRF_B[2], GRF_A[1], SRF_M[2]
+    initial: GRF_A[1] = 0.5, GRF_B[2] = 0.25, SRF_M[0] = 1.0, SRF_M[1] = 2.0, SRF_M[2] = 3.0
+  write-through on (chosen):
+    cycle  1 trigger  -
+    cycle  2 trigger  PC 0 S2 reads SRF_M[1] = 2.0
+    cycle  3 trigger  PC 1 S2 reads GRF_A[1] = 0.5; PC 1 S2 reads SRF_M[0] = 1.0
+    cycle  4 bubble   PC 2 S2 reads GRF_A[1] = 0.5; PC 2 S2 reads SRF_M[2] = 3.0
+    cycle  5 bubble   PC 1 S4 reads GRF_B[2] = 2.0 (write-through); result 2.5; PC 0 S5 writes GRF_B[2] <- 2.0
+    cycle  6 bubble   PC 2 S4 reads GRF_B[2] = 2.5 (write-through); result 4.0; PC 1 S5 writes GRF_B[2] <- 2.5
+    cycle  7 bubble   PC 2 S5 writes GRF_B[2] <- 4.0
+  write-through off:
+    cycle  1 trigger  -
+    cycle  2 trigger  PC 0 S2 reads SRF_M[1] = 2.0
+    cycle  3 trigger  PC 1 S2 reads GRF_A[1] = 0.5; PC 1 S2 reads SRF_M[0] = 1.0
+    cycle  4 bubble   PC 2 S2 reads GRF_A[1] = 0.5; PC 2 S2 reads SRF_M[2] = 3.0
+    cycle  5 bubble   PC 1 S4 reads GRF_B[2] = 0.25; result 0.75; PC 0 S5 writes GRF_B[2] <- 2.0
+    cycle  6 bubble   PC 2 S4 reads GRF_B[2] = 2.0; result 3.5; PC 1 S5 writes GRF_B[2] <- 0.75
+    cycle  7 bubble   PC 2 S5 writes GRF_B[2] <- 3.5
+  GRF_B[2]: in order 4.0, write-through 4.0, no write-through 3.5
+
+2. Distance sweep: consumer k slots after the producer (NOP k-1 between), no bubbles
+   S2 source:   MOV GRF_A[1], SRF_M[1] ... ADD GRF_B[2], GRF_A[1], GRF_A[1]
+   accumulator: MOV GRF_B[2], SRF_M[1] ... MAC GRF_B[2], GRF_A[1], SRF_M[2]
+   k   S2 source (result in GRF_B[2])       MAC accumulator (result in GRF_B[2])
+       write-through   no write-through     write-through   no write-through
+   1     1.0 old         1.0 old              3.5 ok         1.75 old
+   2     1.0 old         1.0 old              3.5 ok          3.5 ok 
+   3     4.0 ok          1.0 old              3.5 ok          3.5 ok 
+   4     4.0 ok          4.0 ok               3.5 ok          3.5 ok 
+   smallest safe k: S2 source 3 (write-through), 4 (without); accumulator 1 (write-through), 2 (without)
+
+3. Random programs (seed 8) with random bubbles, write-through on
+   programs keeping [TOP-HAZ-3]: 8159; equal to in-order execution: 8159
+   the same programs without write-through: equal to in-order: 7442
+   programs breaking [TOP-HAZ-3]: 11841; of them differing from in-order: 8751
+   S2 reads checked against [TOP-HAZ-5] (newest write with S5 cycle <= read cycle): 140122; matching: 140122
+
+ok   all checks pass

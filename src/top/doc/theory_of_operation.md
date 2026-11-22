@@ -43,16 +43,111 @@ The blocks below are split into modules in [hierarchy.md](hierarchy.md).
 | SRF_M | 8 × 16-bit | 1 (S2) | Scalar multiplier operand, broadcast to all 16 lanes. **[paper]** |
 | SRF_A | 8 × 16-bit | 1 (S2) | Scalar addend, broadcast to all 16 lanes. **[paper]** |
 
+The sizes are **[paper]**. The read-port counts are **[bankside]**: they
+follow from the legal operand combinations ([TOP-ARCH-10]). Each file also has
+one debug read port, which the synthesis wrapper ties off ([TOP-HIER-7]).
+
 - **[TOP-ARCH-4]** Each register file has one write port, used by stage S5 and, when
   the unit is idle (`busy = 0` and `trig_valid = 0`, [TOP-IF-6]), by the host
   configuration port. **[bankside]**
-- **[TOP-ARCH-5]** Register-file contents are **not reset**. Only control state (PC,
-  the loop state of [TOP-ISA-3], NOP counter, pipeline valid bits,
-  `err_illegal`) is reset ([TOP-IF-4]). Programs
-  must write a register before reading it. The reference model tracks
-  uninitialised entries and reports a read of one as an error. **[bankside]**
-  The register files are about 4.6 kbit of state, so not resetting them saves
-  area.
+- **[TOP-ARCH-5]** Register-file contents are **not reset**: neither `rst_n`
+  ([TOP-IF-4]) nor anything else clears or initialises the CRF, GRF_A, GRF_B,
+  SRF_M or SRF_A. Only control state (PC, the loop state of [TOP-ISA-3], NOP
+  counter, pipeline valid bits, `err_illegal`) is reset. Programs must write
+  a register before reading it, and the host must load every CRF entry the
+  program executes. The reference model keeps a *written* flag per entry,
+  set by an S5 write or a configuration write that takes effect
+  ([TOP-IF-10]) and never cleared (not by reset either), and reports as an
+  error any read of an entry whose flag is clear: a source read in S2, a MAC
+  accumulator read in S4, or the CRF entry of an instruction that executes.
+  Debug reads ([TOP-IF-11]) are not reported. **[bankside]**
+  The five files hold 5376 bits (CRF 32 × 32 = 1024, GRF_A and GRF_B
+  2 × 8 × 256 = 4096, SRF_M and SRF_A 2 × 8 × 16 = 256; draft 0.1 said
+  "about 4.6 kbit"). Not resetting them saves the reset input of every one of
+  those flip-flops and its routing. Options weighed:
+  - (a) no reset (chosen).
+  - (b) reset every entry to 0, as ANEMOS does: its `rf_twoport` and
+    `rf_threeport` clear all entries on reset (`write_update_thread`, at
+    `f2d4018`; read, not run). Then a program that forgets to load an SRF
+    or GRF entry computes with 0 and can still pass a test whose data
+    happens to tolerate it, and a reset between runs would wipe data the
+    host loaded ([TOP-IF-4] keeps it).
+  - (c) no reset in the RTL but 0 in simulation (an `initial` block or a
+    simulator default). Simulation would then hide exactly the bug (b)
+    hides, and silicon would behave differently from every test.
+
+  ANEMOS clears its register files on reset; bankside doesn't. A VER-2
+  comparison sees the difference only in a kernel that reads an entry it
+  never wrote, which [TOP-ARCH-5] forbids.
+- **[TOP-ARCH-9]** **Reading an entry never written.** An entry not written
+  since power-up holds its **power-up value**: a bit pattern the spec doesn't
+  predict, which may differ from entry to entry and from one power-up to the
+  next. **[bankside]** Precisely:
+  - Every read of the entry returns the same bits, on every read port and the
+    debug port ([TOP-IF-11]), until the entry is first written. Reset doesn't
+    change them ([TOP-ARCH-5]).
+  - An instruction that reads it computes with those bits like with any
+    others: data movement copies them, arithmetic treats them as FP16 values
+    (a NaN among them gives 0x7E00, [TOP-FP-6]). Nothing is flagged in
+    hardware.
+  - An executed CRF entry that was never written runs as whatever instruction
+    its bits encode, an illegal one included ([TOP-ISA-2]).
+  - In the RTL the storage has no reset, no `initial` block and no initial
+    value in its declaration, so the simulator decides the power-up value.
+  - In simulation (Verilator, 2-state, so there is no X), every run gives
+    each register-file bit a random power-up value, drawn from the run's
+    seed: the model is built with `--x-initial unique` (Verilator's default)
+    and run with `+verilator+rand+reset+2` and `+verilator+seed+<seed>`.
+    Verilator's run-time default is 0, which would make an unwritten entry
+    read as 0 in every test, so a run must never use it. The seed is printed
+    with the run, so the values are reproduced with it. A 4-state simulator
+    would show X; bankside doesn't use one.
+  - DV and the reference model don't predict the value. A test that reads an
+    unwritten entry on purpose, with an instruction or through the debug
+    port, checks only that the value is stable as above, and the
+    reference-model comparison ([VER-1]) stops at the model's error.
+
+  Options weighed for the simulated value: random per run (chosen); X, which
+  Verilator can't hold; 0, which hides a missing load (option (c) above); a
+  fixed non-zero pattern such as 0xFFFF (a NaN in every lane), which would
+  catch a missing load in arithmetic but not in a MOV that copies it, and
+  the same in every run. Random values, with a new seed per run, are the
+  ones no test can come to depend on.
+- **[TOP-ARCH-10]** **Read ports.** The functional read ports are those of
+  the table: CRF 1 (fetch), GRF_A 2 (S2), GRF_B 3 (2 in S2, 1 in S4 for the
+  MAC accumulator), SRF_M 1 (S2), SRF_A 1 (S2). For each GRF and SRF the
+  count is the most entries of that file one legal instruction reads in S2
+  plus the most read in S4, since different instructions are in S2 and S4 in
+  the same cycle. Every read port is write-through ([TOP-HAZ-1]). The CRF's
+  count belongs to `pcu_ctrl`'s doc (#27). **[bankside]**
+  The counts are computed from the yaml by
+  [examples/regfile_ports.py](examples/regfile_ports.py)
+  ([hierarchy.md](hierarchy.md#worked-case-read-ports-from-the-yaml)): GRF_B's
+  S2 maximum is 2 (`ADD GRF_A[0], GRF_B[1], GRF_B[2]`) and its S4 maximum is
+  1, so 3. Options weighed for GRF_B:
+  - (a) three ports (chosen).
+  - (b) forbid GRF_B as a MAC multiplier source, as proposed for R11. It
+    doesn't reach two ports: `ADD GRF_A[0], GRF_B[1], GRF_B[2]` and `MUL`
+    with two GRF_B sources stay legal ([TOP-ISA-17], [TOP-ISA-18]), and one
+    of them can be in S2 in the cycle a MAC reads its accumulator in S4, so
+    the script still counts 3. It would also remove 8 of the 16 MAC pairs that
+    [TOP-ISA-22] settled.
+  - (c) two ports, the S4 accumulator read borrowing an S2 port. In
+    bankside's pipeline the borrowed port is wanted by the instruction
+    issued 2 slots after the MAC, so it would need a new programming rule:
+    that instruction reads at most one GRF_B entry as a source. Breaking it
+    would give a wrong value with nothing to show it, and the assembler,
+    the assertions and the model would all have to check one more rule. The
+    saving is one 8-entry, 256-bit read multiplexer. ANEMOS shares in this
+    way, without a rule: its GRF_B port-1 address is the OR of the S2
+    source address and the delayed accumulator address
+    (`instr_decoder.cpp`, `grfb_rd_addr1`, at `f2d4018`, where
+    `MULT_STAGES` = 1; read, not run), so a MAC and the instruction issued
+    one cycle after it that also reads GRF_B through port 1 both read the
+    entry whose index is the OR of the two.
+
+  The cost of (a) is one more 8 × 256 read multiplexer and its write-through
+  bypass; the PPA run (syn) measures it.
 
 ## Pipeline
 
@@ -94,8 +189,33 @@ fixed rate, and nothing tells the host to wait. Dependencies are therefore
 handled by forwarding where the published kernels need it, and by a
 programming rule everywhere else. **[bankside]**
 
-- **[TOP-HAZ-1]** Register files are **write-through**: a read in S2 in the same
-  cycle as an S5 write to the same entry returns the new value. **[bankside]**
+- **[TOP-HAZ-1]** Register files are **write-through**: every read port
+  (the S2 source reads, the S4 accumulator read and the debug read) returns
+  the value being written when the file's write port writes the same entry
+  in the same cycle. In particular, a read in S2 in the same cycle as an S5
+  write to the same entry returns the new value. The write itself takes
+  effect at the end of the cycle. **[bankside]** Options weighed:
+  - (a) write-through (chosen): distance 3 ([TOP-HAZ-3]). Cost: per read
+    port, an index comparator and a 2-to-1 multiplexer in front of the read
+    data.
+  - (b) no write-through: an S2 read sees a write only from the next cycle,
+    so the distance becomes 4. Every kernel needs one more gap slot per
+    dependency: the GEMV store in the
+    [programmer's guide](programmers_guide.md#gemv-partial-sum-no-loop) needs
+    `NOP 3`, and the in-place ReLU loop takes 5 slots per column instead of
+    4. The MAC accumulator would also need its own bypass multiplexer
+    ([TOP-HIER-5] uses write-through for it).
+  - (c) full forwarding from S3, S4 and S5 to S2: not possible for every
+    producer, since an ADD or MAC result exists only at the end of S4, two
+    cycles after the next instruction's S2.
+
+  The papers don't say how the register files are read and written within a
+  cycle. ANEMOS's register files are not write-through: their read method
+  returns the stored `reg[]` signals, which change only after the clock edge
+  (`rf_twoport.h`, `rf_threeport.h` at `f2d4018`; read, not run). Its
+  pipeline is shorter (one MULT and one ADD stage, `MULT_STAGES` =
+  `ADD_STAGES` = 1), so its distances differ anyway, and VER-2 inserts the
+  bankside gap slots when it translates a kernel.
 - **[TOP-HAZ-2]** **Accumulator bypass.** MAC reads its accumulator GRF_B[DST#] in
   S4, not S2. If the instruction in S5 in that cycle writes the same GRF_B
   entry, the accumulator is taken from the S5 result instead of the register
@@ -114,24 +234,143 @@ programming rule everywhere else. **[bankside]**
 Producer *P* issued at cycle *c* writes in S5, cycle *c+4*. Consumer *C* issued
 *k* slots later:
 
-| Consumer reads in | at cycle | needs | so |
-|---|---|---|---|
-| S2 (sources) | c+k+1 | c+k+1 ≥ c+4 (write-through, [TOP-HAZ-1]) | k ≥ 3 |
-| S4 (MAC accumulator) | c+k+3 | k = 1: bypass from S5 ([TOP-HAZ-2]); k ≥ 2: register file | k ≥ 1 |
+| Consumer reads in | at cycle | needs | so | without write-through |
+|---|---|---|---|---|
+| S2 (sources) | c+k+1 | c+k+1 ≥ c+4 (write-through, [TOP-HAZ-1]) | k ≥ 3 | k ≥ 4 |
+| S4 (MAC accumulator) | c+k+3 | k = 1: bypass from S5 ([TOP-HAZ-2]); k ≥ 2: register file | k ≥ 1 | k ≥ 2 |
 
 Bubbles only add cycles between producer and consumer, so counting in slots is
 always safe.
+
+The same in general: a read in cycle *t* sees every write whose S5 cycle is *t*
+or earlier, and no other. An S2 read in cycle *t* is by an instruction issued
+in cycle *t* − 1, so it sees the instructions issued in cycle *t* − 3 or
+earlier; any instruction 3 or more slots earlier is among them, because each
+slot is a cycle of its own. A MAC's S4 read in cycle *t* + 2 (same
+instruction) sees the instructions issued in cycle *t* − 2 or earlier, which is
+every instruction before it. So [TOP-HAZ-4] holds whatever else is in flight,
+and so does [TOP-HAZ-3] once the 2 slots before the consumer don't write its
+sources.
 
 Back-to-back MACs into one GRF_B entry, as in the published GEMV kernels,
 therefore run at one per cycle. The bypass forms a one-cycle loop through the
 FP16 adder, so the adder must fit in one clock period.
 
+### Worked case: the distance, cycle by cycle
+
+Case A: a producer and a consumer at the [TOP-HAZ-3] limit, k = 3 slots, one
+trigger per cycle in cycles 1 to 4 and none after. Lane 0 values; before the
+program GRF_A[1] = 0.5, SRF_M[1] = 2.0 (written by the host).
+
+```
+PC 0  MOV GRF_A[1], SRF_M[1]               ; P: GRF_A[1] <- 2.0
+PC 1  NOP 2                                ; [TOP-HAZ-3]
+PC 2  ADD GRF_B[2], GRF_A[1], GRF_A[1]     ; C: reads GRF_A[1] in S2
+```
+
+| Cycle | `trig_valid` | S1 | S2 | S3 | S4 | S5 | GRF_A[1] after the edge |
+|---|---|---|---|---|---|---|---|
+| 1 | 1 | PC 0 | – | – | – | – | 0.5 |
+| 2 | 1 | PC 1, slot 1 | PC 0: reads SRF_M[1] = 2.0 | – | – | – | 0.5 |
+| 3 | 1 | PC 1, slot 2 | – | PC 0 | – | – | 0.5 |
+| 4 | 1 | PC 2 | – | – | PC 0 | – | 0.5 |
+| 5 | 0 | – | PC 2: reads GRF_A[1] = **2.0 (write-through)**, twice | – | – | PC 0: GRF_A[1] ← 2.0 | 2.0 |
+| 6 | 0 | – | – | PC 2 | – | – | 2.0 |
+| 7 | 0 | – | – | – | PC 2: 2.0 + 2.0 | – | 2.0 |
+| 8 | 0 | – | – | – | – | PC 2: GRF_B[2] ← 4.0 | 2.0 |
+
+The consumer's S2 read (cycle 5) is in the producer's S5 cycle, so the value
+comes through write-through ([TOP-HAZ-1]) and GRF_B[2] gets 4.0, as in-order
+execution gives. Without write-through the read in cycle 5 returns the stored
+0.5 and GRF_B[2] gets 1.0; it would take `NOP 3` (k = 4). The NOP's slots are
+shown in S1 only; whether they travel down S2 to S5 is #24, and no register
+value depends on it.
+
+![Case A: the ADD's S2 read in cycle 5 meets the MOV's S5 write of GRF_A[1]](img/hazard_distance_3.svg)
+
+*Figure 1: case A, [TOP-HAZ-1] and [TOP-HAZ-3]. The MOV writes GRF_A[1] in S5
+in cycle 5 (marker a); the ADD, issued 3 slots later, reads it in S2 in the
+same cycle (marker b) and gets the new value through write-through. Source:
+[hazard_distance_3.wave.json](img/hazard_distance_3.wave.json).*
+
+The distance sweep of the script puts the consumer k = 1 to 4 slots after the
+producer (`NOP k−1` between, no bubbles). "ok" means the result equals
+in-order execution:
+
+| k | S2 source, write-through (chosen) | S2 source, no write-through | MAC accumulator, write-through (chosen) | MAC accumulator, no write-through |
+|---|---|---|---|---|
+| 1 | old value | old value | ok | old value |
+| 2 | old value | old value | ok | ok |
+| 3 | ok | old value | ok | ok |
+| 4 | ok | ok | ok | ok |
+
+The S2 consumer is case A's ADD; the accumulator case is
+`MOV GRF_B[2], SRF_M[1]` followed by `MAC GRF_B[2], GRF_A[1], SRF_M[2]`.
+Case D of the script traces back-to-back MACs right after the MOV that writes
+their accumulator ([TOP-HAZ-4]).
+
+The script also runs 20000 random programs (2 to 8 instructions over six
+entries, random NOPs and random bubbles, seed 8). All 8159 that keep
+[TOP-HAZ-3] end with the same registers as in-order execution under
+write-through; without write-through 717 of them don't.
+
+Script: [examples/hazard_trace.py](examples/hazard_trace.py), output
+[examples/hazard_trace.out](examples/hazard_trace.out). Rerun from the repo
+root: `.venv/bin/python src/top/doc/examples/hazard_trace.py` (exits non-zero
+if a check fails).
+
 ### What happens when a rule is broken
 
-- **[TOP-HAZ-5]** The hardware still does something defined: the S2 read returns
-  whatever the register file holds in that cycle (the old value). An SVA
-  assertion flags it in simulation, the reference model raises an error, and
-  the assembler rejects the program. **[bankside]**
+- **[TOP-HAZ-5]** The hardware still does something defined. An S2 read in
+  cycle *t* returns the value of the **newest write to that entry whose S5
+  cycle is *t* or earlier** (a write in cycle *t* itself through
+  write-through, [TOP-HAZ-1]). If no instruction has written the entry, it
+  returns what the host wrote last, or the power-up value ([TOP-ARCH-9]).
+  Writes of instructions still in S3 or S4 are not seen. An SVA assertion
+  flags the broken rule in simulation, counting slots as [TOP-HAZ-3] does,
+  the reference model raises an error, and the assembler rejects the
+  program. **[bankside]**
+
+  Draft 0.1 said "the old value". That is right only when no other write to
+  the entry is in flight. Two cases from the script show the difference:
+  - **Case B, an older write in flight.** PC 1 breaks the rule (k = 2), and
+    PC 0 also writes the entry, one slot earlier. The read meets PC 0's S5
+    write and returns PC 0's value, not the value held before the program.
+  - **Case C, a bubble.** The same program with a cycle without a trigger
+    after PC 1. The rule is still broken in slots (k = 2), but the read is 3
+    cycles after PC 1 and meets its S5 write, so it returns PC 1's value and
+    the result equals in-order execution.
+
+  Case B, one trigger per cycle; before the program GRF_A[1] = 0.5, SRF_M[0]
+  = 1.0, SRF_M[1] = 2.0:
+
+  ```
+  PC 0  MOV GRF_A[1], SRF_M[0]             ; GRF_A[1] <- 1.0
+  PC 1  MOV GRF_A[1], SRF_M[1]             ; GRF_A[1] <- 2.0
+  PC 2  NOP 1                              ; breaks [TOP-HAZ-3]: k = 2 from PC 1
+  PC 3  ADD GRF_B[2], GRF_A[1], GRF_A[1]
+  ```
+
+  | Cycle | S1 | S2 | S3 | S4 | S5 |
+  |---|---|---|---|---|---|
+  | 1 | PC 0 | – | – | – | – |
+  | 2 | PC 1 | PC 0: reads SRF_M[0] = 1.0 | – | – | – |
+  | 3 | PC 2 | PC 1: reads SRF_M[1] = 2.0 | PC 0 | – | – |
+  | 4 | PC 3 | – | PC 1 | PC 0 | – |
+  | 5 | – | PC 3: reads GRF_A[1] = **1.0 (PC 0's write, write-through)** | – | PC 1 | PC 0: GRF_A[1] ← 1.0 |
+  | 6 | – | – | PC 3 | – | PC 1: GRF_A[1] ← 2.0 |
+  | 7 | – | – | – | PC 3: 1.0 + 1.0 | – |
+  | 8 | – | – | – | – | PC 3: GRF_B[2] ← 2.0 |
+
+  In-order execution gives 4.0; "the old value" (0.5) would give 1.0; the
+  hardware gives 2.0. In case C the ADD issues in cycle 5, reads in cycle 6,
+  meets PC 1's write and gives 4.0.
+
+  The script checks the rule's wording on every S2 read of the 20000 random
+  programs, legal or not (140122 reads): each returns the newest write with
+  an S5 cycle no later than the read. For DV: a test that breaks
+  [TOP-HAZ-3] on purpose ([VER-10]) predicts the read from the cycles of the
+  trigger sequence, not from the slot count.
 
 ## FP16 arithmetic
 
