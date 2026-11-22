@@ -18,7 +18,11 @@ All instructions are 32 bits. **[paper]** (Table III) for the field layout.
 - **R** is the ReLU flag (data format), **A** the AAM flag (ALU format).
 - **DST#, SRC0#, SRC1#** are 3-bit register indices, one per operand field.
 - **[TOP-ISA-1]** Unused bits (–) are written as 0 by the assembler and ignored by
-  the hardware. **[bankside]**
+  the hardware. **[bankside]** The assembler also writes 0 into every field
+  an instruction ignores ([assembler syntax](#assembler-syntax)), with one
+  exception: it writes GRF_B (code 1) into MAC's SRC2. **[paper]** for that
+  encoding (Section III-C: "SRC2 (GRF_B) points to the same GRF register as
+  DST"), **[ANEMOS]** for the hardware ignoring it ([TOP-ISA-10]).
 - **[TOP-ISA-9]** An index field whose operand is a bank (EVEN_BANK, ODD_BANK)
   selects nothing and is ignored: a bank operand's address comes from the
   trigger ([TOP-ARCH-6]). The one exception is SRC1# of MAD, which also
@@ -28,6 +32,8 @@ All instructions are 32 bits. **[paper]** (Table III) for the field layout.
   whatever it holds, including a reserved code: their legality
   ([TOP-ISA-2]) doesn't depend on SRC2. **[ANEMOS]** (its decoder reads SRC2
   only for MAD), **[bankside]** (reserved codes there are not illegal).
+  For MAC the assembler writes GRF_B there, as the paper's Section III-C
+  describes the field ([TOP-ISA-1]); the hardware still ignores it.
 
 **Checked against the paper.** [examples/paper_table3.py](examples/paper_table3.py)
 reads Table III's cell borders and labels out of the paper's PDF and maps each
@@ -175,7 +181,7 @@ The same word in an instruction-word table, with two more:
 | Instruction | Word | bankside | ANEMOS |
 |---|---|---|---|
 | `MOV GRF_B[0], EVEN_BANK` | `0x43000000` | illegal ([TOP-ISA-15]): one-slot NOP, `err_illegal` ← 1 | no write (its decoder writes GRF_B only from ODD_BANK) |
-| `MAC GRF_A[0], GRF_A[1], EVEN_BANK` | `0xB0200010` | illegal ([TOP-ISA-21]: dst is GRF_B only): one-slot NOP, `err_illegal` ← 1 | computes but writes nothing: its MAC decode enables a write only for a GRF_B destination |
+| `MAC GRF_A[0], GRF_A[1], EVEN_BANK` | `0xB0210010` | illegal ([TOP-ISA-21]: dst is GRF_B only): one-slot NOP, `err_illegal` ← 1 | computes but writes nothing: its MAC decode enables a write only for a GRF_B destination |
 | `ADD GRF_A[0], EVEN_BANK, ODD_BANK` | `0x81280000` | illegal ([TOP-ARCH-7]: two bank operands): one-slot NOP, `err_illegal` ← 1 | not traced here: VER-2 leaves illegal words out |
 
 ## Instruction reference
@@ -565,16 +571,40 @@ against ANEMOS must leave this combination out.
   GRF_B[i] ← round(GRF_B[i] + round(src0 × src1)) ([TOP-FP-3]), with *i* =
   DST#. **[paper]** (Table II; GRF_B is the only destination).
   - (src0, src1) is one of the 16 pairs of [TOP-ISA-22]; dst is GRF_B only.
-    The SRC2 field is ignored ([TOP-ISA-10]).
+    The hardware ignores the SRC2 field ([TOP-ISA-10]); the assembler
+    writes GRF_B (code 1) there ([TOP-ISA-1]).
 - The accumulator is read late, in S4, with a bypass ([TOP-HAZ-2]). A MAC may
   follow the previous write of its GRF_B entry immediately ([TOP-HAZ-4]).
 - The paper's Fig. 7 and the Hot Chips slides show `MAC GRF_A, …`, which
   contradicts Table II and the text. bankside treats the figure as an erratum.
 - The paper's Section III-C describes MAC's SRC2 as GRF_B: "SRC2 (GRF_B)
-  points to the same GRF register as DST". bankside ignores the field instead
-  ([TOP-ISA-10], **[ANEMOS]**). Whether to follow the paper here is open in
-  [issue #19](https://github.com/idanhochman/bankside/issues/19); until it is
-  settled, tests must not depend on MAC's SRC2 value.
+  points to the same GRF register as DST". The field carries no information
+  of its own: the accumulator is GRF_B[DST#] whatever SRC2 holds. So bankside
+  splits the two readings. The assembler follows the paper and writes GRF_B
+  (**[paper]**, [TOP-ISA-1]); the hardware follows ANEMOS, whose decoder reads
+  SRC2 only for MAD, and ignores the field (**[ANEMOS]**, [TOP-ISA-10]).
+  ANEMOS's assembler writes 0 (GRF_A) there instead, and such a word runs
+  the same MAC on bankside, so translated ANEMOS kernels need no rewrite of
+  SRC2.
+
+Worked case. `MAC GRF_B[0], EVEN_BANK, SRF_M[0]` with three values in SRC2
+(bits 18–16). All three run the same MAC, GRF_B[0] ← round(GRF_B[0] +
+round(bank × SRF_M[0])), on bankside and in ANEMOS; only the first is what
+bankside's assembler writes. Checked by
+[examples/check_isa.py](examples/check_isa.py):
+
+| SRC2 | Word | Who writes it | bankside |
+|---|---|---|---|
+| 1 (GRF_B) | 0xB3110000 | bankside's assembler, as the paper describes the field | the MAC above |
+| 0 (GRF_A) | 0xB3100000 | ANEMOS's assembler (`nmcInst` defaults `src2` to 0) | the same MAC |
+| 7 (reserved) | 0xB3170000 | nobody; built by hand | the same MAC: legal ([TOP-ISA-10]) |
+
+The options weighed (issue #19): ignoring SRC2 with the assembler writing 0
+(the earlier rule) matches ANEMOS but not the paper's encoding; requiring
+SRC2 = GRF_B and making other values illegal matches the paper strictly, but
+it would make the 0xB3100000 row illegal, so every ANEMOS MAC kernel would
+need SRC2 rewritten and VER-8 would gain an illegal class, for no hardware
+gain. The chosen split gives the paper's words and still runs both rows.
 
 ### Legal combinations compared with the paper
 
@@ -624,7 +654,7 @@ The option weighed against it: drop the same-file pairs (GRF_A, GRF_A) and
 those two. MUL keeps both (its 32 needs all 16), and a MAC or MAD reads its
 two sources in S2 exactly like a MUL, so dropping them saves no read port
 ([register files](theory_of_operation.md#register-files)). The two options
-differ on, for example, `MAC GRF_B[0], GRF_A[1], GRF_A[2]` (`0xB2000012`):
+differ on, for example, `MAC GRF_B[0], GRF_A[1], GRF_A[2]` (`0xB2010012`):
 with all 16 pairs (and in ANEMOS) GRF_B[0] ← round(GRF_B[0] +
 round(GRF_A[1] × GRF_A[2])); with 14 it would be illegal, a one-slot NOP that
 sets `err_illegal` and leaves GRF_B[0] unchanged.
@@ -698,6 +728,7 @@ each next to its rule. The FP16 ones are in the
 | EXIT | [TOP-ISA-5] | clears the loop state | PC ← 0 only |
 | Illegal words | [TOP-ISA-2], [TOP-ISA-24] | one-slot NOP, `err_illegal` | no check, no flag; a reserved opcode is a no-op, an illegal operand combination may partly execute |
 | MAD's SRC2 other than SRF_A | [TOP-ISA-23] | illegal | used as the addend |
+| MAC's SRC2 as assembled | [TOP-ISA-1] | GRF_B (1); the hardware ignores it | GRF_A (0); its decoder ignores it too, so the words differ only in bits 18–16 |
 | MAD with a bank src0 and src1 = GRF_B | [TOP-ISA-19] | as specified | reads GRF_B at a stale index (an ANEMOS bug, see [MAD](#mad)) |
 | `MOV(RELU)` into an SRF or a bank | [TOP-ISA-30] | ReLU applied | R has no effect |
 | FILL | [TOP-ISA-16] | the four bank ↔ GRF moves | not implemented |
@@ -734,8 +765,12 @@ not one program (the JUMP would break [TOP-ISA-14] at PC 1).
 
 The assembler writes 0 into every field the instruction ignores: unused bits
 ([TOP-ISA-1]), the index field of a bank operand other than MAD's SRC1#
-([TOP-ISA-9]), SRC2 of ADD, MUL and MAC ([TOP-ISA-10]) and R of FILL.
-**[bankside]** Their encodings are checked by
+([TOP-ISA-9]), SRC2 of ADD and MUL ([TOP-ISA-10]) and R of FILL.
+**[bankside]** The one exception is SRC2 of MAC, which the hardware also
+ignores: the assembler writes GRF_B (code 1) there, as the paper's
+Section III-C describes the field ([TOP-ISA-1], **[paper]**). So
+`MAC GRF_B[0], EVEN_BANK, SRF_M[0]` assembles to `0xB3110000`, not
+`0xB3100000`. These encodings are checked by
 [examples/check_isa.py](examples/check_isa.py).
 
 ## Examples

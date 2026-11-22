@@ -165,6 +165,8 @@ instructions:
     # GRF_B[dst_idx] = round(GRF_B[dst_idx] + round(src0 * src1)) [TOP-ISA-21]
     # src0 x src1: the same 16 pairs as MUL [TOP-ISA-22]; the paper's Table II
     # counts 14 without naming the two it drops.
+    # The hardware ignores src2; the assembler writes GRF_B (1) there, as the
+    # paper's Section III-C describes the field [TOP-ISA-1].
     src2: ignored
     legal:
       - src0: [GRF_A, GRF_B, EVEN_BANK, ODD_BANK]

@@ -10,7 +10,9 @@ Checks, in order:
   5. The guide's assembler examples assemble from the yaml encoding, decode
      back to the same text, and are legal, except lines marked "; illegal",
      which must be illegal (a JUMP is checked at its PC, [TOP-ISA-26]); the
-     [TOP-ISA-22], [TOP-ISA-23] and [TOP-ISA-26] cases; every instruction word the guide writes out encodes as written.
+     [TOP-ISA-22], [TOP-ISA-23] and [TOP-ISA-26] cases; MAC's SRC2 is
+     assembled as GRF_B and ignored on decode ([TOP-ISA-1], [TOP-ISA-10]);
+     every instruction word the guide writes out encodes as written.
   6. Requirement IDs: each is defined (in bold) exactly once, and every
      reference points to a defined ID.
   7. Every relative Markdown link resolves, including #anchors.
@@ -201,6 +203,12 @@ def assemble(line):
             w = put(w, fmt, f + "_idx", idx)
     if relu:
         w = put(w, fmt, "relu", 1)
+    if mn == "MAC":
+        # [TOP-ISA-1]: the one ignored field the assembler doesn't fill with 0.
+        # The paper's encoding (Section III-C) puts GRF_B in MAC's SRC2; the
+        # hardware ignores it (yaml MAC: src2: ignored, [TOP-ISA-10]).
+        assert INS["MAC"]["src2"] == "ignored"
+        w = put(w, fmt, "src2", OPS["GRF_B"]["code"])
     return w
 
 
@@ -288,6 +296,30 @@ except AssertionError:
 w = put(assemble("ADD GRF_A[2], EVEN_BANK, SRF_A[0]"), "alu", "src2", 7)
 check(legal(w), "ISA-10: reserved SRC2 made ADD illegal")
 print(f"       0x{w:08X}  ADD GRF_A[2], EVEN_BANK, SRF_A[0] with SRC2 = 7: legal")
+# [TOP-ISA-1], [TOP-ISA-10]: every MAC the guide writes assembles with
+# SRC2 = GRF_B, and a MAC is legal (and decodes the same) with any SRC2.
+macs = [norm(re.sub(r"^PC \d+\s+", "", l.strip())) for b in programs for l in b.splitlines()
+        if re.match(r"(PC \d+\s+)?MAC ", l.strip())]
+OPND = r"(?:[A-Z_]+\[\d\]|EVEN_BANK|ODD_BANK)"
+macs += re.findall(rf"`(MAC {OPND}, {OPND}, {OPND})`", guide)
+for line in sorted(set(macs)):
+    check(get(assemble(line), "alu", "src2") == OPS["GRF_B"]["code"], f"ISA-1: {line} SRC2")
+print(f"       {len(set(macs))} MAC lines in the guide assemble with SRC2 = {OPS['GRF_B']['code']} (GRF_B) [TOP-ISA-1]")
+mac = assemble("MAC GRF_B[0], EVEN_BANK, SRF_M[0]")
+for code in range(8):
+    w = (mac & ~(7 << 16)) | (code << 16)
+    check(legal(w) and decode(w) == decode(mac), f"ISA-10: MAC SRC2 = {code}")
+print(f"       0x{mac:08X}  MAC GRF_B[0], EVEN_BANK, SRF_M[0]; with SRC2 = 0..7 legal, same decode [TOP-ISA-10]")
+# The guide's MAC SRC2 table: each row's word is the assembled MAC with that
+# SRC2 code, and only the GRF_B row is what the assembler writes.
+rows = re.findall(r"^\| (\d) \(([A-Za-z_]+)\) \| (0x[0-9A-F]{8}) \|", guide, re.M)
+check(len(rows) == 3, f"MAC SRC2 table: {len(rows)} rows")
+for code, name, word in rows:
+    w = (mac & ~(7 << 16)) | (int(code) << 16)
+    check(w == int(word, 16), f"MAC SRC2 table {code}: {word}, built 0x{w:08X}")
+    check(name == CODE2OP.get(int(code), "reserved"), f"MAC SRC2 table name {name}")
+    check(legal(w), f"MAC SRC2 table {code} illegal")
+    print(f"       {word}  MAC SRC2 = {code} ({name}): legal{', as assembled' if w == mac else ''} (guide table)")
 # [TOP-ISA-23]: a MAD whose SRC2 isn't SRF_A is illegal, whatever it holds.
 base = assemble("MAD GRF_A[0], ODD_BANK, SRF_M[2], SRF_A[2]")
 for code in range(8):
