@@ -39,12 +39,14 @@ done and the maintainer has reviewed the ones they chose to review.
 
 **Goal:** the FP16 multiplier and adder, proven correct on their own. The
 first full designer → DV → review cycle, on small modules with a clean
-interface.
+interface. Each unit has its unit testplan and tests.
 
 **Done when:**
 - both units are lint-clean and synthesize;
 - DV's sweeps match NumPy `float16` bit-exactly, including subnormals,
   NaN/Inf and round-to-nearest-even ties;
+- each unit has a unit testplan (`src/<module>/dv/README.md`) and tests, for
+  `fp16_mul` and `fp16_add`;
 - each unit has review pages on both sides (`rtl/doc/`, `dv/doc/`);
 - each unit has a first PPA number (area and timing on ASAP7).
 
@@ -63,13 +65,16 @@ interface.
 
 ## M4: PCU core
 
-**Goal:** all nine instructions working in the RTL.
+**Goal:** all nine instructions working in the RTL. Each module of the core
+has its unit testplan and tests.
 
 **Done when:**
 - the core is brought up in this order, each step with directed tests per
   instruction passing against the reference model: NOP/EXIT, the program
   counter, MOV/FILL, ADD/MUL, MAC/MAD (with the accumulator bypass), JUMP;
 - each step has its review pages;
+- each core module (`pcu_ctrl`, `pcu_decode`, `pcu_datapath`, `pcu_regfile`)
+  has a unit testplan (`src/<module>/dv/README.md`) and tests;
 - spec gaps found on the way are settled in the spec.
 
 ## M5: v1 verification closure
