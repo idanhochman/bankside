@@ -75,7 +75,9 @@ rule says so.
   (`$error` or `$fatal` in an elaboration-time check), naming the parameter.
   The defaults are the SRF shape (8 × 16, one read port); `top` sets all
   three parameters explicitly on every instance, with the values of the
-  [TOP-HIER-4] table, and `crf`'s `N_RD` from `pcu_ctrl`'s doc (#27).
+  [TOP-HIER-4] table: `crf` 2 (the fetch at the PC and a JUMP's target, in
+  the same S1 cycle, set by `pcu_ctrl`'s doc, #27), `grf_a` 2, `grf_b` 3,
+  `srf_m` 1, `srf_a` 1 ([TOP-ARCH-10]).
 
   `DEPTH` must be a power of two so that every value of an `IDX_W`-bit index
   names an entry ([RF-11]). Every v1 depth is one (8 and 32). The power-of-two
@@ -251,7 +253,7 @@ cell. Source: [rf_port_timing.wave.json](img/rf_port_timing.wave.json).*
 | Choice | Options | Where they differ | Chosen |
 |---|---|---|---|
 | Read-port shape | (a) packed `[N_RD-1:0][W-1:0]` vectors; (b) unpacked arrays `[N_RD]`; (c) named ports `rd0_*`, `rd1_*`, … | (c) can't follow `N_RD`. (b) vs (a): the same hardware, but an unpacked array at the module's top level is awkward to reach from cocotb on Verilator, and a unit test drives this module directly | (a), [RF-4]. **[bankside]** |
-| Debug port | (a) a separate port, always present, not in `N_RD`; (b) the last of `N_RD` + 1 ports; (c) present only when a parameter says so | (b): `crf`'s `N_RD` from `pcu_ctrl` (#27) would have to add one, and `top`'s port numbers of [TOP-HIER-4] would shift. (c): the simulated and synthesised modules would differ, while [TOP-HIER-7] already removes the port in synthesis by tying it off | (a), [RF-10]. **[bankside]** |
+| Debug port | (a) a separate port, always present, not in `N_RD`; (b) the last of `N_RD` + 1 ports; (c) present only when a parameter says so | (b): `crf`'s `N_RD` (2, from `pcu_ctrl`'s doc, #27) would have to become 3, and `top`'s port numbers of [TOP-HIER-4] would shift. (c): the simulated and synthesised modules would differ, while [TOP-HIER-7] already removes the port in synthesis by tying it off | (a), [RF-10]. **[bankside]** |
 | `DEPTH` | (a) a power of two only; (b) any depth, with an in-module range check | `DEPTH` = 6 with `IDX_W` = 3: under (b) index 7 needs a defined result, the check [TOP-HIER-6] and [TOP-HIER-7] already put in `top`; under (a) the case can't occur. All v1 depths are powers of two | (a), [RF-1], [RF-11]. **[bankside]** |
 | Write-through mux placement | (a) after the stored-entry read mux; (b) folded into it | No behaviour differs; only the length of the [TOP-HAZ-4] loop does ([RF-13]) | (a), a note to the designer, not a rule a test can check |
 
@@ -315,14 +317,14 @@ that the value is stable and the same on every port, not what it is
 ### 4. Index width on the five instances
 
 For each instance, with the shapes of the [TOP-HIER-4] table (GRF and SRF
-sizes checked against the yaml's `operands`; `crf`'s `N_RD` = 1 stands in
-until #27): `IDX_W` = clog2(`DEPTH`) and 2^`IDX_W` = `DEPTH`, and every index
+sizes checked against the yaml's `operands`; `crf`'s `N_RD` = 2 from
+`pcu_ctrl`'s doc, #27): `IDX_W` = clog2(`DEPTH`) and 2^`IDX_W` = `DEPTH`, and every index
 value is written and read back on every port, both in the write's cycle
 (write-through) and the cycle after (stored).
 
 | Instance | `DEPTH` | `WIDTH` | `N_RD` | `IDX_W` | Every index an entry | Read-back |
 |---|---|---|---|---|---|---|
-| `crf` | 32 | 32 | 1 (#27) | 5 | yes | ok |
+| `crf` | 32 | 32 | 2 | 5 | yes | ok |
 | `grf_a` | 8 | 256 | 2 | 3 | yes | ok |
 | `grf_b` | 8 | 256 | 3 | 3 | yes | ok |
 | `srf_m` | 8 | 16 | 1 | 3 | yes | ok |

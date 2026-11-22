@@ -32,7 +32,7 @@
 
 4. The five instances: IDX_W = clog2(DEPTH), every index names an entry
    instance  DEPTH WIDTH N_RD IDX_W  2**IDX_W==DEPTH  write/read-back of every index on every port
-   crf          32    32    1     5  True             ok
+   crf          32    32    2     5  True             ok
    grf_a         8   256    2     3  True             ok
    grf_b         8   256    3     3  True             ok
    srf_m         8    16    1     3  True             ok

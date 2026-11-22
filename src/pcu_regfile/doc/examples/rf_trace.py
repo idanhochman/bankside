@@ -197,7 +197,7 @@ check(other != p6, "another seed gives another power-up value (for these seeds)"
 print("\n4. The five instances: IDX_W = clog2(DEPTH), every index names an entry")
 isa = yaml.safe_load((TOP_DOC / "bankside_isa.yaml").read_text())["operands"]
 inst = [  # (instance, yaml operand or None, DEPTH, WIDTH, N_RD)
-    ("crf", None, 32, 32, 1),   # CRF size: theory_of_operation.md register-file table; N_RD from pcu_ctrl (#27)
+    ("crf", None, 32, 32, 2),   # CRF size: theory_of_operation.md register-file table; N_RD 2 from pcu_ctrl's doc (#27)
     ("grf_a", "GRF_A", 8, 256, 2),
     ("grf_b", "GRF_B", 8, 256, 3),
     ("srf_m", "SRF_M", 8, 16, 1),
