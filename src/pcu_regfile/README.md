@@ -1,6 +1,8 @@
 # pcu_regfile
 
-<!-- One or two lines: what this module does. The architect fills this in. -->
+A parameterised register file (depth, width, number of read ports) with one
+write port, combinational write-through reads, a debug read port and no reset.
+`top` uses it for the CRF, GRF_A, GRF_B, SRF_M and SRF_A. Spec: [doc/](doc/README.md).
 
 - **Requirement ID prefix:** `RF` (e.g. `[RF-1]`). Never reused.
 - **Parent:** [top](../top/doc/), whose doc describes how this module connects
