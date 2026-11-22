@@ -1,6 +1,8 @@
 # pcu_datapath
 
-<!-- One or two lines: what this module does. The architect fills this in. -->
+Stages S2 to S5 of the pipeline: source reads, SRF broadcast and ReLU, 16 lanes of FP16
+multiply and add, the MAC accumulator read, and the S5 register-file and bank writes.
+The spec is [doc/README.md](doc/README.md).
 
 - **Requirement ID prefix:** `DP` (e.g. `[DP-1]`). Never reused.
 - **Parent:** [top](../top/doc/), whose doc describes how this module connects

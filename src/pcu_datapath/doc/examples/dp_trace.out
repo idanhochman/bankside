@@ -1,0 +1,150 @@
+1. Cases A to F
+
+| Cycle | `iss_valid`, `iss_instr` | S2 reads (lane 0) | `s3_valid` `s4_valid` `s5_valid` | `grf_b` port 2 (S4, lane 0) | `grf_b_wr_*` (lane 0) | `bank_wr_*` (lane 0) | `busy` |
+|---|---|---|---|---|---|---|---|
+| 1 | 0 | – | 0 0 0 | – | 0 | 0 | 0 |
+| 2 | 1, MOV GRF_B[0], ODD_BANK | `bank_rd_data` = 0.5 | 0 0 0 | – | 0 | 0 | 0 |
+| 3 | 1, MAC GRF_B[0], EVEN_BANK, SRF_M[0] | `bank_rd_data` = 1.0; `srf_m` 0 [0] = 0.5 | 1 0 0 | – | 0 | 0 | 1 |
+| 4 | 1, MAC GRF_B[0], ODD_BANK, SRF_M[1] | `bank_rd_data` = 2.0; `srf_m` 0 [1] = 3.0 | 1 1 0 | – | 0 | 0 | 1 |
+| 5 | 1, `DEC_NOP` | – | 1 1 1 | [0] = 0.5 (write-through) | [0] ← 0.5 | 0 | 1 |
+| 6 | 1, `DEC_NOP` | – | 1 1 1 | [0] = 1.0 (write-through) | [0] ← 1.0 | 0 | 1 |
+| 7 | 1, MOV ODD_BANK, GRF_B[0] | `grf_b` 0 [0] = 7.0 (write-through) | 1 1 1 | – | [0] ← 7.0 | 0 | 1 |
+| 8 | 1, `DEC_NOP` | – | 1 1 1 | – | 0 | 0 | 1 |
+| 9 | 0 | – | 1 1 1 | – | 0 | 0 | 1 |
+| 10 | 0 | – | 0 1 1 | – | 0 | 1, ODD, row 0, col 6, 7.0 | 1 |
+| 11 | 0 | – | 0 0 1 | – | 0 | 0 | 1 |
+| 12 | 0 | – | 0 0 0 | – | 0 | 0 | 0 |
+ok   Case A: the table above appears in the doc word for word
+
+ok   Case A: bank write ODD col 6 and GRF_B[0] equal in-order execution, all 16 lanes
+ok   Case A == module_trace.py (a): one store, cycle 10, ODD col 6, 16 lanes [7.0, 7.25, 7.5, 7.75]...
+| Cycle 5 | `grf_b` port 0 (ADD src0) | `grf_b` port 1 (ADD src1) | `grf_b` port 2 (MAC accumulator) | `grf_b_wr_*` (MOV, S5) | GRF_B[4] after | GRF_A[0] after |
+|---|---|---|---|---|---|---|
+| chosen: three ports | [1] = 4.0 (write-through) | [2] = 0.5 | [4] = 1.0 | [1] ← 4.0 | 2.0 | 4.5 |
+| ANEMOS's sharing: port 1 at 2 OR 4, accumulator through port 1 | [1] = 4.0 (write-through) | [6] = -3.0 | not used | [1] ← 4.0 | -2.0 | 1.0 |
+| in-order execution | – | – | – | – | 2.0 | 4.5 |
+ok   Case B: the table above appears in the doc word for word
+
+ok   Case B: chosen == in-order, all lanes
+ok   Case B: ANEMOS's port sharing differs from in-order on both results
+ok   Case B: cycle 5 has the ADD in S2, the NOP slot in S3, the MAC in S4, the MOV in S5
+ok   Case C: MOV SRF_M[2], GRF_A[1] is legal
+ok   Case C: MOV SRF_M[2], GRF_A[1] == in-order
+ok   Case C: MOV(RELU) SRF_M[2], GRF_A[1] is legal
+ok   Case C: MOV(RELU) SRF_M[2], GRF_A[1] == in-order
+ok   Case C: MOV GRF_B[0], SRF_M[0] is legal
+ok   Case C: MOV GRF_B[0], SRF_M[0] == in-order
+ok   Case C: MOV(RELU) GRF_B[0], SRF_M[0] is legal
+ok   Case C: MOV(RELU) GRF_B[0], SRF_M[0] == in-order
+ok   Case C: MOV SRF_A[3], SRF_M[0] is legal
+ok   Case C: MOV SRF_A[3], SRF_M[0] == in-order
+ok   Case C: MOV(RELU) SRF_A[3], SRF_M[0] is legal
+ok   Case C: MOV(RELU) SRF_A[3], SRF_M[0] == in-order
+ok   Case C: MOV GRF_B[2], GRF_A[1] is legal
+ok   Case C: MOV GRF_B[2], GRF_A[1] == in-order
+ok   Case C: MOV(RELU) GRF_B[2], GRF_A[1] is legal
+ok   Case C: MOV(RELU) GRF_B[2], GRF_A[1] == in-order
+ok   Case C: MOV(RELU) EVEN_BANK, GRF_A[1] is legal
+ok   Case C: MOV(RELU) EVEN_BANK, GRF_A[1] == in-order
+ok   Case C: FILL EVEN_BANK, GRF_A[1] is legal
+ok   Case C: FILL EVEN_BANK, GRF_A[1] == in-order
+ok   Case C: FILL EVEN_BANK, GRF_A[1] with R = 1 is legal
+ok   Case C: FILL EVEN_BANK, GRF_A[1] with R = 1 == in-order
+| Instruction | Word | Written | Value |
+|---|---|---|---|
+| `MOV SRF_M[2], GRF_A[1]` | `0x44000210` | SRF_M[2] | 0xBC00 |
+| `MOV(RELU) SRF_M[2], GRF_A[1]` | `0x44001210` | SRF_M[2] | 0x0000 |
+| `MOV GRF_B[0], SRF_M[0]` | `0x42800000` | GRF_B[0] | 0xC000 in all 16 lanes |
+| `MOV(RELU) GRF_B[0], SRF_M[0]` | `0x42801000` | GRF_B[0] | 0x0000 in all 16 lanes |
+| `MOV SRF_A[3], SRF_M[0]` | `0x46800300` | SRF_A[3] | 0xC000 |
+| `MOV(RELU) SRF_A[3], SRF_M[0]` | `0x46801300` | SRF_A[3] | 0x0000 |
+| `MOV GRF_B[2], GRF_A[1]` | `0x42000210` | GRF_B[2], lanes 0 to 7 | 0xBC00 0x4000 0x8000 0xFC01 0x7C01 0xFE00 0x7E00 0x8001 |
+| `MOV(RELU) GRF_B[2], GRF_A[1]` | `0x42001210` | GRF_B[2], lanes 0 to 7 | 0x0000 0x4000 0x0000 0x0000 0x7C01 0x0000 0x7E00 0x0000 |
+| `MOV(RELU) EVEN_BANK, GRF_A[1]` | `0x48001010` | the EVEN_BANK column, lanes 0 to 7 | 0x0000 0x4000 0x0000 0x0000 0x7C01 0x0000 0x7E00 0x0000 |
+| `FILL EVEN_BANK, GRF_A[1]` | `0x58000010` | the EVEN_BANK column, lanes 0 to 7 | 0xBC00 0x4000 0x8000 0xFC01 0x7C01 0xFE00 0x7E00 0x8001 |
+| `FILL EVEN_BANK, GRF_A[1] with R = 1` | `0x58001010` | the EVEN_BANK column, lanes 0 to 7 | 0xBC00 0x4000 0x8000 0xFC01 0x7C01 0xFE00 0x7E00 0x8001 |
+ok   Case C: the table above appears in the doc word for word
+
+ok   Case C: word 0x44000210 is in the guide's MOV table and here
+ok   Case C: word 0x44001210 is in the guide's MOV table and here
+ok   Case C: word 0x42801000 is in the guide's MOV table and here
+ok   Case C: word 0x48001010 is in the guide's MOV table and here
+ok   Case D: MUL GRF_A[0], GRF_A[1], GRF_A[2] == in-order (chosen)
+ok   Case D: MOV GRF_B[0], GRF_A[1] == in-order (chosen)
+ok   Case D: ADD GRF_A[0], GRF_A[1], GRF_A[2] == in-order (chosen)
+| Instruction | Path | Lane | Inputs | Chosen: carried as bits | Through the units: x × 1.0 in S3, x + (+0) in S4 |  |
+|---|---|---|---|---|---|---|
+| `MUL GRF_A[0], GRF_A[1], GRF_A[2]` | a × b in S3, then carried through S4 | 0 | 0xBC00, 0x0000 | 0x8000 | 0x0000 | **differs** |
+|  |  | 1 | 0x7C01, 0x3C00 | 0x7E00 | 0x7E00 | same |
+|  |  | 2 | 0x8000, 0x3C00 | 0x8000 | 0x0000 | **differs** |
+|  |  | 3 | 0x3C00, 0x8000 | 0x8000 | 0x0000 | **differs** |
+| `MOV GRF_B[0], GRF_A[1]` | carried through S3 and S4 | 0 | 0xBC00 | 0xBC00 | 0xBC00 | same |
+|  |  | 1 | 0x7C01 | 0x7C01 | 0x7E00 | **differs** |
+|  |  | 2 | 0x8000 | 0x8000 | 0x0000 | **differs** |
+|  |  | 3 | 0x3C00 | 0x3C00 | 0x3C00 | same |
+| `ADD GRF_A[0], GRF_A[1], GRF_A[2]` | carried through S3, then a + b in S4 | 0 | 0xBC00, 0x0000 | 0xBC00 | 0xBC00 | same |
+|  |  | 1 | 0x7C01, 0x3C00 | 0x7E00 | 0x7E00 | same |
+|  |  | 2 | 0x8000, 0x3C00 | 0x3C00 | 0x3C00 | same |
+|  |  | 3 | 0x3C00, 0x8000 | 0x3C00 | 0x3C00 | same |
+ok   Case D: the table above appears in the doc word for word
+
+ok   Case D: the two options differ on some lane
+| Cycle | `rst_n` | `trig_valid` | `iss_valid`, `iss_instr` | `s3_valid` `s4_valid` `s5_valid` | S5 write ports (chosen) | `busy` | S5 write ports, gated by `rst_n` |
+|---|---|---|---|---|---|---|---|
+| 1 | 1 | 1 | 0 | 0 0 0 | – | 0 | – |
+| 2 | 1 | 1 | 1, MOV GRF_A[1], SRF_M[1] | 0 0 0 | – | 0 | – |
+| 3 | 1 | 1 | 1, MOV GRF_A[2], SRF_M[1] | 1 0 0 | – | 1 | – |
+| 4 | 1 | 1 | 1, MOV EVEN_BANK, GRF_A[3] | 1 1 0 | – | 1 | – |
+| 5 | 0 | 0 | 1, `DEC_NOP` | 1 1 1 | `grf_a` [1] ← 2.0 | 1 | – |
+| 6 | 1 | 0 | 0 | 0 0 0 | – | 0 | – |
+| 7 | 1 | 0 | 0 | 0 0 0 | – | 0 | – |
+ok   Case E: the table above appears in the doc word for word
+
+ok   Case E (chosen): the entry in S5 in the reset cycle writes GRF_A[1]; the MOV in S4 and the store in S3 are removed
+ok   Case E (gated): GRF_A[1] keeps 0.5
+ok   Case E: busy (dp's term) 0 0 1 1 1 0 0
+ok   Case F: MOV GRF_A[3], EVEN_BANK is legal
+ok   Case F: MOV SRF_A[1], GRF_B[6] is legal
+ok   Case F: ADD GRF_A[2], EVEN_BANK, SRF_A[0] is legal
+ok   Case F: ADD GRF_B[1], SRF_A[4], GRF_A[7] is legal
+ok   Case F: MUL GRF_B[3], GRF_A[1], SRF_M[4] is legal
+ok   Case F: MAD GRF_A[0], ODD_BANK, SRF_M[2], SRF_A[2] is legal
+ok   Case F: MAD GRF_A[0], GRF_B[1], EVEN_BANK, SRF_A[5] is legal
+ok   Case F: MAC GRF_B[3], GRF_B[1], GRF_B[2] is legal
+| Instruction | Word | `grf_a` 0 | `grf_a` 1 | `grf_b` 0 | `grf_b` 1 | `srf_m` 0 | `srf_a` 0 | `bank_rd_data` | `grf_b` 2 (S4) |
+|---|---|---|---|---|---|---|---|---|---|
+| `MOV GRF_A[3], EVEN_BANK` | `0x41000300` |  |  |  |  |  |  | a |  |
+| `MOV SRF_A[1], GRF_B[6]` | `0x46400160` |  |  | a: [6] |  |  |  |  |  |
+| `ADD GRF_A[2], EVEN_BANK, SRF_A[0]` | `0x81180200` |  |  |  |  |  | b: [0] | a |  |
+| `ADD GRF_B[1], SRF_A[4], GRF_A[7]` | `0x82C00147` |  | b: [7] |  |  |  | a: [4] |  |  |
+| `MUL GRF_B[3], GRF_A[1], SRF_M[4]` | `0x92100314` | a: [1] |  |  |  | b: [4] |  |  |  |
+| `MAD GRF_A[0], ODD_BANK, SRF_M[2], SRF_A[2]` | `0xA1530002` |  |  |  |  | b: [2] | c: [2] | a |  |
+| `MAD GRF_A[0], GRF_B[1], EVEN_BANK, SRF_A[5]` | `0xA0630015` |  |  | a: [1] |  |  | c: [5] | b |  |
+| `MAC GRF_B[3], GRF_B[1], GRF_B[2]` | `0xB2490312` |  |  | a: [1] | b: [2] |  |  |  | acc: [3] |
+ok   Case F: the table above appears in the doc word for word
+
+2. Figure 1 against case A, cell by cell
+ok   Figure 1: 180 cells equal the model
+ok   Figure 1: every wave string has the same length {12}
+
+3. Every legal operand combination of the yaml
+ok   164 combinations (MOV 20 pairs x R, FILL 4, ADD 40, MUL 32, MAD 32, MAC 16)
+ok   3280 runs, 20 per combination, equal to in-order execution, all lanes: 3280
+ok   ports needed by [DP-7] {'grf_a': 2, 'grf_b': 3, 'srf_m': 1, 'srf_a': 1} == regfile_ports.py {'grf_a': 2, 'grf_b': 3, 'srf_m': 1, 'srf_a': 1} == N_RD {'grf_a': 2, 'grf_b': 3, 'srf_m': 1, 'srf_a': 1}
+
+4. ReLU and the bit copy on all 65536 lane patterns
+ok   MOV(RELU) == fp_relu_nan.relu_bankside, MOV R=0 and FILL (R bit set) copy bits: mismatches {'MOV(RELU)': 0, 'MOV': 0, 'FILL': 0}
+
+5. Random programs
+ok   (a) 3000 random legal programs keeping [TOP-HAZ-3] and [TOP-HAZ-6] (41 with a bank store and a later read of its column), bubbles, rows 0/1, columns 0/1: registers and bank columns == in-order, all lanes: 3000
+ok   (a) at most one write enable per cycle ([TOP-PIPE-1])
+ok   (b) 1134 legal hazard_trace.py programs (497 of them break [TOP-HAZ-3]), random bubbles: every register, lane 0, == hazard_trace.pipeline(): 1134
+ok   (c) 17500 cycles with random triggers and resets: s3/s4/s5_valid and busy == [TOP-IF-7] term 1 for S3 to S5: 17500
+
+ok   the doc says: 'checks all 180 cells'
+ok   the doc says: 'execution: 3280 runs'
+ok   the doc says: 'come up often. 41 of them'
+ok   the doc says: 'the legal ones: 1134 programs, 497 of them'
+ok   the doc says: 'in all 17500'
+
+ok   all checks pass

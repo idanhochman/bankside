@@ -1,0 +1,38 @@
+{
+  "signal": [
+    {"name": "clk", "wave": "p..........."},
+    ["issue",
+      {"name": "trig_valid", "wave": "1......0...."},
+      {"name": "iss_valid", "wave": "01......0..."},
+      {"name": "iss_instr", "wave": "x=======x...", "data": ["MOV", "MAC", "MAC", "DEC_NOP", "DEC_NOP", "MOV", "DEC_NOP"], "node": "......f....."}
+    ],
+    {},
+    ["valid",
+      {"name": "s3_valid (internal)", "wave": "0.1......0.."},
+      {"name": "s4_valid (internal)", "wave": "0..1......0."},
+      {"name": "s5_valid (internal)", "wave": "0...1......0"}
+    ],
+    {},
+    ["S4",
+      {"name": "grf_b_rd_idx[2]", "wave": "x...==x.....", "data": ["0", "0"]},
+      {"name": "grf_b_rd_data[2]", "wave": "x...==x.....", "data": ["0.5", "1.0"], "node": "....bd......"}
+    ],
+    {},
+    ["S5",
+      {"name": "grf_b_wr_en", "wave": "0...1..0...."},
+      {"name": "grf_b_wr_idx", "wave": "x...===x....", "data": ["0", "0", "0"]},
+      {"name": "grf_b_wr_data", "wave": "x...===x....", "data": ["0.5", "1.0", "7.0"], "node": "....ac......"}
+    ],
+    {},
+    ["bank",
+      {"name": "bank_wr_en", "wave": "0........10."},
+      {"name": "bank_wr_col", "wave": "x........=x.", "data": ["6"], "node": ".........g.."},
+      {"name": "bank_wr_data", "wave": "x........=x.", "data": ["7.0"]}
+    ],
+    {},
+    {"name": "busy", "wave": "0.1........0"}
+  ],
+  "edge": ["a~>b", "c~>d", "f~>g"],
+  "head": {"tick": 1},
+  "config": {"hscale": 2}
+}

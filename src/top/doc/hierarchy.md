@@ -27,7 +27,7 @@ differently, the rule says how.
 | `top` | – | none | `TOP` | The v1 unit: the ports of [interfaces.md](interfaces.md), the children below and the glue between them (write-port select, debug read select, `busy`). | M4 |
 | [`pcu_ctrl`](../../pcu_ctrl/doc/README.md) | `ctrl` | `top` | `CTRL` | Stage S1: trigger, PC, loop state, NOP counter, CRF fetch, JUMP/EXIT, bank read request, `err_illegal`. Owns the S1/S2 register. | M4 |
 | `pcu_decode` | `dec` | `pcu_ctrl` | `DEC` | Combinational: one 32-bit instruction word to its decoded fields and an illegal flag, from [bankside_isa.yaml](bankside_isa.yaml). | M4 |
-| `pcu_datapath` | `dp` | `top` | `DP` | Stages S2 to S5: source selection, SRF broadcast, ReLU, the 16 lanes of multiply and add, the MAC accumulator read, write-back and the bank write port. Owns the S2/S3, S3/S4 and S4/S5 registers. | M4 |
+| [`pcu_datapath`](../../pcu_datapath/doc/README.md) | `dp` | `top` | `DP` | Stages S2 to S5: source selection, SRF broadcast, ReLU, the 16 lanes of multiply and add, the MAC accumulator read, write-back and the bank write port. Owns the S2/S3, S3/S4 and S4/S5 registers. | M4 |
 | `fp16_mul` | 16, one per lane | `pcu_datapath` | `FMUL` | One FP16 multiply, combinational ([TOP-HIER-3]). | M2 |
 | `fp16_add` | 16, one per lane | `pcu_datapath` | `FADD` | One FP16 add, combinational ([TOP-HIER-3]). | M2 |
 | [`pcu_regfile`](../../pcu_regfile/doc/README.md) | `crf`, `grf_a`, `grf_b`, `srf_m`, `srf_a` | `top` | `RF` | A parameterised register file: depth, width, number of read ports; combinational reads, write-through, one write port, no reset ([TOP-HIER-4]). | M4 |
@@ -35,7 +35,8 @@ differently, the rule says how.
 
 `fp16_mul` and `fp16_add` are the names [VER-4] in the
 [verification requirements](../dv/README.md) uses. The lane generate-block and
-instance names inside `pcu_datapath` are set by its doc.
+instance names inside `pcu_datapath` are set by
+[its doc](../../pcu_datapath/doc/README.md#lanes-and-the-fp16-units).
 
 ![The v1 module tree: top has pcu_ctrl, pcu_datapath and five pcu_regfile instances; pcu_ctrl has pcu_decode; pcu_datapath has 16 fp16_mul and 16 fp16_add](img/top_hierarchy.svg)
 
@@ -52,7 +53,8 @@ that specifies it, and its prefix. Source: [top_hierarchy.dot](img/top_hierarchy
     the **issue** output of `pcu_ctrl`, defined in
     [its doc](../../pcu_ctrl/doc/README.md#the-issue-bundle).
   - `pcu_datapath` does S2 to S5 and holds the **S2/S3, S3/S4 and S4/S5
-    registers**, with each stage's control carried next to its data. The
+    registers**, with each stage's control carried next to its data
+    ([its doc](../../pcu_datapath/doc/README.md#state-reset-and-the-clock)). The
     `bank_wr_*` ports ([TOP-IF-3]) are driven from the S4/S5 register.
   - No other module holds pipeline state. `pcu_regfile` holds only its
     entries; `fp16_mul` and `fp16_add` hold nothing.
@@ -305,7 +307,7 @@ timing; the rules it carries out are cited by their `TOP-` IDs, not copied.
 | [`pcu_regfile`](../../pcu_regfile/doc/README.md) | Parameters (depth, width, number of read ports); ports, with indices of clog2(depth) bits ([TOP-HIER-6], [TOP-HIER-7]); combinational read, write-through on every port including the debug port ([TOP-HAZ-1], [TOP-IF-12]), write at the edge, no reset and no initial value ([TOP-ARCH-5], [TOP-ARCH-9]) | #8, #15 |
 | `pcu_decode` | Input word; the decoded instruction (fields, operand selects, indices, R, the stages used, slot count, IMM0/IMM1) and the illegal flag, for every opcode, from the yaml ([TOP-ISA-1], [TOP-ISA-2], [TOP-ISA-9], [TOP-ISA-10], [TOP-ISA-15] to [TOP-ISA-21], [TOP-ISA-24], [TOP-ISA-25]). The JUMP IMM0 check ([TOP-ISA-26]) needs the PC, so `pcu_ctrl` adds it | #6 (merged), #9, #19 |
 | [`pcu_ctrl`](../../pcu_ctrl/doc/README.md) | Ports (trigger, fetch, bank read request, issue, `busy`, `err_illegal`); S1 timing; PC, loop state, NOP counter ([TOP-ISA-3] to [TOP-ISA-8], [TOP-ISA-12], [TOP-ISA-13], [TOP-ISA-26] to [TOP-ISA-28]); `err_illegal` ([TOP-ISA-24]); the zero-slot JUMP fetch and the CRF's read ports; the issue bundle (the S1/S2 register) and its valid bit ([TOP-PIPE-4]); its `busy` term ([TOP-IF-7], [TOP-HIER-8]); reset ([TOP-IF-4]) | #9, #10, #27 |
-| `pcu_datapath` | Ports (issue, `bank_rd_data`, the S2 and S4 read ports, the S5 write, `bank_wr_*`, `busy`); S2 to S5 timing; source selection, SRF broadcast ([TOP-ISA-11]), ReLU ([TOP-FP-8], [TOP-ISA-30]), MOV GRF → SRF lane ([TOP-ISA-29]), the MAC accumulator read ([TOP-HIER-5]), bank stores ([TOP-ARCH-8], [TOP-IF-3]); the S3 to S5 valid bits and its `busy` term ([TOP-PIPE-4], [TOP-IF-7], [TOP-HIER-8]); lane naming (lane numbers: [TOP-ISA-29]) | #7, #8, #9, #10 |
+| [`pcu_datapath`](../../pcu_datapath/doc/README.md) | Ports (issue, `bank_rd_data`, the S2 and S4 read ports, the S5 write, `bank_wr_*`, `busy`); S2 to S5 timing; source selection, SRF broadcast ([TOP-ISA-11]), ReLU ([TOP-FP-8], [TOP-ISA-30]), MOV GRF → SRF lane ([TOP-ISA-29]), the MAC accumulator read ([TOP-HIER-5]), bank stores ([TOP-ARCH-8], [TOP-IF-3]); the S3 to S5 valid bits and its `busy` term ([TOP-PIPE-4], [TOP-IF-7], [TOP-HIER-8]); lane naming (lane numbers: [TOP-ISA-29]) | #7, #8, #9, #10 |
 | `common` | A pointer to the docs its package implements ([TOP-HIER-9]); no rules of its own | – |
 
 `pcu_ctrl` must exist before `pcu_decode` is created, and `pcu_datapath`
