@@ -1,0 +1,109 @@
+1. Worked cases (the tables are checked against interfaces.md)
+
+Case P: rise and fall. Idle in cycle 1, triggers in cycles 2 and 3
+    PC 0  MOV GRF_A[0], EVEN_BANK
+    PC 1  EXIT
+| Cycle | `trig_valid` | Slot issued (S1) | In S2 to S5 | NOP slots left | `loop_active` | `busy` | (1b) | configuration write |
+|---|---|---|---|---|---|---|---|---|
+| 1 | 0 | – | – | 0 | 0 | **0** | 0 | takes effect |
+| 2 | 1 | PC 0 MOV GRF_A[0], EVEN_BANK | – | 0 | 0 | **0** | 1 | ignored |
+| 3 | 1 | PC 1 EXIT | S2: PC 0 | 0 | 0 | **1** | 1 | ignored |
+| 4 | 0 | – | S2: PC 1, S3: PC 0 | 0 | 0 | **1** | 1 | ignored |
+| 5 | 0 | – | S3: PC 1, S4: PC 0 | 0 | 0 | **1** | 1 | ignored |
+| 6 | 0 | – | S4: PC 1, S5: PC 0 | 0 | 0 | **1** | 1 | ignored |
+| 7 | 0 | – | S5: PC 1 | 0 | 0 | **1** | 1 | ignored |
+| 8 | 0 | – | – | 0 | 0 | **0** | 0 | takes effect |
+| 9 | 0 | – | – | 0 | 0 | **0** | 0 | takes effect |
+
+  rise/fall chosen ([3], [8]), (1b) ([2], [8])
+
+Case Q: bubbles inside a NOP. ADD in cycle 1, NOP slot 1 in 2, bubbles 3 to 8, slots 2 and 3 in 9 and 10, EXIT in 11
+    PC 0  ADD GRF_A[0], GRF_A[1], SRF_A[0]
+    PC 1  NOP 3
+    PC 2  EXIT
+| Cycle | `trig_valid` | Slot issued (S1) | In S2 to S5 | NOP slots left | `loop_active` | `busy` | (1b) | configuration write |
+|---|---|---|---|---|---|---|---|---|
+| 1 | 1 | PC 0 ADD GRF_A[0], GRF_A[1], SRF_A[0] | – | 0 | 0 | **0** | 1 | ignored |
+| 2 | 1 | PC 1 NOP 3 | S2: PC 0 | 0 | 0 | **1** | 1 | ignored |
+| 3 | 0 | – | S2: PC 1, S3: PC 0 | 2 | 0 | **1** | 1 | ignored |
+| 4 | 0 | – | S3: PC 1, S4: PC 0 | 2 | 0 | **1** | 1 | ignored |
+| 5 | 0 | – | S4: PC 1, S5: PC 0 | 2 | 0 | **1** | 1 | ignored |
+| 6 | 0 | – | S5: PC 1 | 2 | 0 | **1** | 1 | ignored |
+| 7 | 0 | – | – | 2 | 0 | **1** | 1 | ignored |
+| 8 | 0 | – | – | 2 | 0 | **1** | 1 | ignored |
+| 9 | 1 | PC 1 NOP slot | – | 2 | 0 | **1** | 1 | ignored |
+| 10 | 1 | PC 1 NOP slot | S2: PC 1 | 1 | 0 | **1** | 1 | ignored |
+| 11 | 1 | PC 2 EXIT | S2: PC 1, S3: PC 1 | 0 | 0 | **1** | 1 | ignored |
+| 12 | 0 | – | S2: PC 2, S3: PC 1, S4: PC 1 | 0 | 0 | **1** | 1 | ignored |
+| 13 | 0 | – | S3: PC 2, S4: PC 1, S5: PC 1 | 0 | 0 | **1** | 1 | ignored |
+| 14 | 0 | – | S4: PC 2, S5: PC 1 | 0 | 0 | **1** | 1 | ignored |
+| 15 | 0 | – | S5: PC 2 | 0 | 0 | **1** | 1 | ignored |
+| 16 | 0 | – | – | 0 | 0 | **0** | 0 | takes effect |
+
+Case R: bubbles inside a loop. Slot 2 starts the loop, bubbles 3 to 8, slot 3 ends it and issues EXIT
+    PC 0  MOV GRF_A[0], EVEN_BANK
+    PC 1  JUMP -1, 1
+    PC 2  EXIT
+| Cycle | `trig_valid` | Slot issued (S1) | In S2 to S5 | NOP slots left | `loop_active` | `busy` | (1b) | configuration write |
+|---|---|---|---|---|---|---|---|---|
+| 1 | 1 | PC 0 MOV GRF_A[0], EVEN_BANK | – | 0 | 0 | **0** | 1 | ignored |
+| 2 | 1 | PC 0 MOV GRF_A[0], EVEN_BANK | S2: PC 0 | 0 | 0 | **1** | 1 | ignored |
+| 3 | 0 | – | S2: PC 0, S3: PC 0 | 0 | 1 | **1** | 1 | ignored |
+| 4 | 0 | – | S3: PC 0, S4: PC 0 | 0 | 1 | **1** | 1 | ignored |
+| 5 | 0 | – | S4: PC 0, S5: PC 0 | 0 | 1 | **1** | 1 | ignored |
+| 6 | 0 | – | S5: PC 0 | 0 | 1 | **1** | 1 | ignored |
+| 7 | 0 | – | – | 0 | 1 | **1** | 1 | ignored |
+| 8 | 0 | – | – | 0 | 1 | **1** | 1 | ignored |
+| 9 | 1 | PC 2 EXIT | – | 0 | 1 | **1** | 1 | ignored |
+| 10 | 0 | – | S2: PC 2 | 0 | 0 | **1** | 1 | ignored |
+| 11 | 0 | – | S3: PC 2 | 0 | 0 | **1** | 1 | ignored |
+| 12 | 0 | – | S4: PC 2 | 0 | 0 | **1** | 1 | ignored |
+| 13 | 0 | – | S5: PC 2 | 0 | 0 | **1** | 1 | ignored |
+| 14 | 0 | – | – | 0 | 0 | **0** | 0 | takes effect |
+
+Case S: where (2b) differs. Triggers in cycles 1 to 4
+    PC 0  MOV GRF_B[0], GRF_A[0]
+    PC 1  NOP 2
+    PC 2  EXIT
+| Cycle | `trig_valid` | Slot issued (S1) | In S2 to S5 | NOP slots left | `loop_active` | `busy` | (1b) | (2b) | configuration write |
+|---|---|---|---|---|---|---|---|---|---|
+| 1 | 1 | PC 0 MOV GRF_B[0], GRF_A[0] | – | 0 | 0 | **0** | 1 | 0 | ignored |
+| 2 | 1 | PC 1 NOP 2 | S2: PC 0 | 0 | 0 | **1** | 1 | 1 | ignored |
+| 3 | 1 | PC 1 NOP slot | S2: PC 1, S3: PC 0 | 1 | 0 | **1** | 1 | 1 | ignored |
+| 4 | 1 | PC 2 EXIT | S2: PC 1, S3: PC 1, S4: PC 0 | 0 | 0 | **1** | 1 | 1 | ignored |
+| 5 | 0 | – | S2: PC 2, S3: PC 1, S4: PC 1, S5: PC 0 | 0 | 0 | **1** | 1 | 1 | ignored |
+| 6 | 0 | – | S3: PC 2, S4: PC 1, S5: PC 1 | 0 | 0 | **1** | 1 | 0 | ignored |
+| 7 | 0 | – | S4: PC 2, S5: PC 1 | 0 | 0 | **1** | 1 | 0 | ignored |
+| 8 | 0 | – | S5: PC 2 | 0 | 0 | **1** | 1 | 0 | ignored |
+| 9 | 0 | – | – | 0 | 0 | **0** | 0 | 0 | takes effect |
+
+  falls: chosen [9], (2b) [6]
+
+Case T: the host stops inside a loop; rst_n = 0 in cycle 10
+    PC 0  MOV GRF_A[0], EVEN_BANK
+    PC 1  JUMP -1, 5
+    PC 2  EXIT
+| Cycle | `trig_valid` | Slot issued (S1) | In S2 to S5 | NOP slots left | `loop_active` | `busy` | (1b) | configuration write |
+|---|---|---|---|---|---|---|---|---|
+| 1 | 1 | PC 0 MOV GRF_A[0], EVEN_BANK | – | 0 | 0 | **0** | 1 | ignored |
+| 2 | 1 | PC 0 MOV GRF_A[0], EVEN_BANK | S2: PC 0 | 0 | 0 | **1** | 1 | ignored |
+| 3 | 0 | – | S2: PC 0, S3: PC 0 | 0 | 1 | **1** | 1 | ignored |
+| 4 | 0 | – | S3: PC 0, S4: PC 0 | 0 | 1 | **1** | 1 | ignored |
+| 5 | 0 | – | S4: PC 0, S5: PC 0 | 0 | 1 | **1** | 1 | ignored |
+| 6 | 0 | – | S5: PC 0 | 0 | 1 | **1** | 1 | ignored |
+| 7 | 0 | – | – | 0 | 1 | **1** | 1 | ignored |
+| 8 | 0 | – | – | 0 | 1 | **1** | 1 | ignored |
+| 9 | 0 | – | – | 0 | 1 | **1** | 1 | ignored |
+| 10 | 0 | – | – | 0 | 1 | **1** | 1 | ignored |
+| 11 | 0 | – | – | 0 | 0 | **0** | 0 | takes effect |
+| 12 | 0 | – | – | 0 | 0 | **0** | 0 | takes effect |
+
+2. Random runs (seed 24): 5000 programs of 2 to 10 words, random triggers and resets
+   cycles: 142160; configuration write accepted (chosen busy): 15522
+   cycles where the chosen busy and (1b) accept the same configuration writes ([TOP-IF-8]): 142160
+   accepted cycles with an entry in S5, NOP slots left or loop_active = 1 ([TOP-HIER-6]): 0
+   runs where every trigger outside reset made exactly one entry: 5000 of 5000
+   runs matching the closed form (1 for 4 cycles after the last slot, then NOP/loop state): 5000 of 5000
+   runs where (2b) differs from the chosen busy: 4503; largest shift of the last busy cycle: 15 cycles
+
+ok   all checks pass

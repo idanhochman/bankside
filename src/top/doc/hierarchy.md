@@ -169,9 +169,14 @@ The glue that `top` itself contains:
   write port after the write-port select, so a configuration write that
   [TOP-IF-8] or [TOP-IF-10] ignores is never shown.
 - **[TOP-HIER-8]** **Busy.** `busy` is the OR of a `busy` output of `ctrl`
-  (an instruction valid in S1, NOP slots left, `loop_active`) and one of `dp`
-  (an instruction valid in S2 to S5): together the terms of [TOP-IF-7]. The
-  exact cycles are #24. **[bankside]**
+  and one of `dp`, together the terms of [TOP-IF-7]. `ctrl`'s covers an
+  entry in S2 (the valid bit of its S1/S2 register), NOP slots left and
+  `loop_active`. `dp`'s covers an entry in S3, S4 or S5 (the valid bits of
+  its S2/S3, S3/S4 and S4/S5 registers). Every slot sets the S1/S2 valid
+  bit, whatever it issues ([TOP-PIPE-4]), and a valid bit moves down with
+  its entry whether or not the entry writes anything. Both outputs come
+  from registers only, so `busy` has no combinational path from any input.
+  **[bankside]**
 
 ## Shared package and the wrapper
 
@@ -239,8 +244,9 @@ PC 5  EXIT
   bypass with no multiplexer in `dp` ([TOP-HIER-5]).
 - In cycle 7 the store reads GRF_B[0] in S2, 3 slots after the last MAC, in
   the cycle that MAC writes it: [TOP-HAZ-1] and [TOP-HAZ-3].
-- The NOP slots are shown in S1 only. Whether they travel down S2 to S5 is
-  #24; nothing in this trace depends on it.
+- The NOP slots are shown in S1 only. They travel down S2 to S5 as entries
+  that carry nothing ([TOP-PIPE-4]), so nothing in this trace depends on
+  them.
 
 The script runs the same program with the bypass built as (a) `grf_b`
 write-through, (b) a multiplexer in `dp`, and (c) neither, and compares the
@@ -294,8 +300,8 @@ timing; the rules it carries out are cited by their `TOP-` IDs, not copied.
 | `fp16_add` | As `fp16_mul`, for +, including the signs of zero results ([TOP-FP-5]); the timing budget: one clock period, since it sits in the bypass loop | #7 |
 | `pcu_regfile` | Parameters (depth, width, number of read ports); ports, with indices of clog2(depth) bits ([TOP-HIER-6], [TOP-HIER-7]); combinational read, write-through on every port including the debug port ([TOP-HAZ-1], [TOP-IF-12]), write at the edge, no reset and no initial value ([TOP-ARCH-5], [TOP-ARCH-9]) | #8, #15 |
 | `pcu_decode` | Input word; the decoded instruction (fields, operand selects, indices, R, the stages used, slot count, IMM0/IMM1) and the illegal flag, for every opcode, from the yaml ([TOP-ISA-1], [TOP-ISA-2], [TOP-ISA-9], [TOP-ISA-10], [TOP-ISA-15] to [TOP-ISA-21], [TOP-ISA-24], [TOP-ISA-25]). The JUMP IMM0 check ([TOP-ISA-26]) needs the PC, so `pcu_ctrl` adds it | #6 (merged), #9, #19 |
-| `pcu_ctrl` | Ports (trigger, fetch, bank read request, issue, `busy`, `err_illegal`); S1 timing; PC, loop state, NOP counter ([TOP-ISA-3] to [TOP-ISA-8], [TOP-ISA-12], [TOP-ISA-13], [TOP-ISA-26] to [TOP-ISA-28]); `err_illegal` ([TOP-ISA-24]); the zero-slot JUMP fetch and the CRF's read ports; the issue bundle (the S1/S2 register); reset ([TOP-IF-4]) | #9, #24, #27 |
-| `pcu_datapath` | Ports (issue, `bank_rd_data`, the S2 and S4 read ports, the S5 write, `bank_wr_*`, `busy`); S2 to S5 timing; source selection, SRF broadcast ([TOP-ISA-11]), ReLU ([TOP-FP-8], [TOP-ISA-30]), MOV GRF → SRF lane ([TOP-ISA-29]), the MAC accumulator read ([TOP-HIER-5]), bank stores ([TOP-ARCH-8], [TOP-IF-3]); lane naming (lane numbers: [TOP-ISA-29]) | #7, #8, #9, #10 |
+| `pcu_ctrl` | Ports (trigger, fetch, bank read request, issue, `busy`, `err_illegal`); S1 timing; PC, loop state, NOP counter ([TOP-ISA-3] to [TOP-ISA-8], [TOP-ISA-12], [TOP-ISA-13], [TOP-ISA-26] to [TOP-ISA-28]); `err_illegal` ([TOP-ISA-24]); the zero-slot JUMP fetch and the CRF's read ports; the issue bundle (the S1/S2 register) and its valid bit ([TOP-PIPE-4]); its `busy` term ([TOP-IF-7], [TOP-HIER-8]); reset ([TOP-IF-4]) | #9, #10, #27 |
+| `pcu_datapath` | Ports (issue, `bank_rd_data`, the S2 and S4 read ports, the S5 write, `bank_wr_*`, `busy`); S2 to S5 timing; source selection, SRF broadcast ([TOP-ISA-11]), ReLU ([TOP-FP-8], [TOP-ISA-30]), MOV GRF → SRF lane ([TOP-ISA-29]), the MAC accumulator read ([TOP-HIER-5]), bank stores ([TOP-ARCH-8], [TOP-IF-3]); the S3 to S5 valid bits and its `busy` term ([TOP-PIPE-4], [TOP-IF-7], [TOP-HIER-8]); lane naming (lane numbers: [TOP-ISA-29]) | #7, #8, #9, #10 |
 | `common` | A pointer to the docs its package implements ([TOP-HIER-9]); no rules of its own | – |
 
 `pcu_ctrl` must exist before `pcu_decode` is created, and `pcu_datapath`

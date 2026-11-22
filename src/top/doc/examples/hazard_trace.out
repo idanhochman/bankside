@@ -118,5 +118,139 @@ Case D: [TOP-HAZ-4], MACs right after the producer of their accumulator
    the same programs without write-through: equal to in-order: 7442
    programs breaking [TOP-HAZ-3]: 11841; of them differing from in-order: 8751
    S2 reads checked against [TOP-HAZ-5] (newest write with S5 cycle <= read cycle): 140122; matching: 140122
+4. Bank columns: store in S5, read requested in S1 and sampled at the end of that cycle
+
+Case E: store then load of the same column, k = 4 slots ([TOP-HAZ-6] at its limit)
+    PC 0  MOV EVEN_BANK col 3, GRF_A[1]
+    PC 1  NOP 3
+    PC 2  MOV GRF_A[0], EVEN_BANK col 3
+    initial: GRF_A[0] = 0.125, GRF_A[1] = 0.5, GRF_A[2] = 0.25, SRF_M[1] = 2.0, EVEN_BANK col 3 = 0.75
+  bank write-first (chosen):
+    cycle  1 trigger  -
+    cycle  2 trigger  PC 0 S2 reads GRF_A[1] = 0.5
+    cycle  3 trigger  -
+    cycle  4 trigger  -
+    cycle  5 trigger  PC 2 S1 bank read EVEN_BANK col 3 = 0.5 (store of this edge); PC 0 S5 writes EVEN_BANK col 3 <- 0.5
+    cycle  6 bubble   PC 2 S2 bank_rd_data EVEN_BANK col 3 = 0.5
+    cycle  7 bubble   -
+    cycle  8 bubble   -
+    cycle  9 bubble   PC 2 S5 writes GRF_A[0] <- 0.5
+  bank read-first:
+    cycle  1 trigger  -
+    cycle  2 trigger  PC 0 S2 reads GRF_A[1] = 0.5
+    cycle  3 trigger  -
+    cycle  4 trigger  -
+    cycle  5 trigger  PC 2 S1 bank read EVEN_BANK col 3 = 0.75; PC 0 S5 writes EVEN_BANK col 3 <- 0.5
+    cycle  6 bubble   PC 2 S2 bank_rd_data EVEN_BANK col 3 = 0.75
+    cycle  7 bubble   -
+    cycle  8 bubble   -
+    cycle  9 bubble   PC 2 S5 writes GRF_A[0] <- 0.75
+  GRF_A[0]: in order 0.5, write-first 0.5, read-first 0.75
+
+Case F: [TOP-HAZ-6] broken (k = 3 from PC 1), an older store (PC 0) in flight
+    PC 0  MOV EVEN_BANK col 3, GRF_A[1]
+    PC 1  MOV EVEN_BANK col 3, GRF_A[2]
+    PC 2  NOP 2
+    PC 3  MOV GRF_A[0], EVEN_BANK col 3
+    initial: GRF_A[0] = 0.125, GRF_A[1] = 0.5, GRF_A[2] = 0.25, SRF_M[1] = 2.0, EVEN_BANK col 3 = 0.75
+  bank write-first (chosen):
+    cycle  1 trigger  -
+    cycle  2 trigger  PC 0 S2 reads GRF_A[1] = 0.5
+    cycle  3 trigger  PC 1 S2 reads GRF_A[2] = 0.25
+    cycle  4 trigger  -
+    cycle  5 trigger  PC 3 S1 bank read EVEN_BANK col 3 = 0.5 (store of this edge); PC 0 S5 writes EVEN_BANK col 3 <- 0.5
+    cycle  6 bubble   PC 3 S2 bank_rd_data EVEN_BANK col 3 = 0.5; PC 1 S5 writes EVEN_BANK col 3 <- 0.25
+    cycle  7 bubble   -
+    cycle  8 bubble   -
+    cycle  9 bubble   PC 3 S5 writes GRF_A[0] <- 0.5
+  bank read-first:
+    cycle  1 trigger  -
+    cycle  2 trigger  PC 0 S2 reads GRF_A[1] = 0.5
+    cycle  3 trigger  PC 1 S2 reads GRF_A[2] = 0.25
+    cycle  4 trigger  -
+    cycle  5 trigger  PC 3 S1 bank read EVEN_BANK col 3 = 0.75; PC 0 S5 writes EVEN_BANK col 3 <- 0.5
+    cycle  6 bubble   PC 3 S2 bank_rd_data EVEN_BANK col 3 = 0.75; PC 1 S5 writes EVEN_BANK col 3 <- 0.25
+    cycle  7 bubble   -
+    cycle  8 bubble   -
+    cycle  9 bubble   PC 3 S5 writes GRF_A[0] <- 0.75
+  GRF_A[0]: in order 0.25, write-first 0.5 (PC 0's 0.5, not the 0.75 held before the program)
+
+Case G: program F with a bubble after PC 1 (k = 3 slots but 4 cycles)
+    PC 0  MOV EVEN_BANK col 3, GRF_A[1]
+    PC 1  MOV EVEN_BANK col 3, GRF_A[2]
+    PC 2  NOP 2
+    PC 3  MOV GRF_A[0], EVEN_BANK col 3
+    initial: GRF_A[0] = 0.125, GRF_A[1] = 0.5, GRF_A[2] = 0.25, SRF_M[1] = 2.0, EVEN_BANK col 3 = 0.75
+  bank write-first (chosen):
+    cycle  1 trigger  -
+    cycle  2 trigger  PC 0 S2 reads GRF_A[1] = 0.5
+    cycle  3 bubble   PC 1 S2 reads GRF_A[2] = 0.25
+    cycle  4 trigger  -
+    cycle  5 trigger  PC 0 S5 writes EVEN_BANK col 3 <- 0.5
+    cycle  6 trigger  PC 3 S1 bank read EVEN_BANK col 3 = 0.25 (store of this edge); PC 1 S5 writes EVEN_BANK col 3 <- 0.25
+    cycle  7 bubble   PC 3 S2 bank_rd_data EVEN_BANK col 3 = 0.25
+    cycle  8 bubble   -
+    cycle  9 bubble   -
+    cycle 10 bubble   PC 3 S5 writes GRF_A[0] <- 0.25
+  bank read-first:
+    cycle  1 trigger  -
+    cycle  2 trigger  PC 0 S2 reads GRF_A[1] = 0.5
+    cycle  3 bubble   PC 1 S2 reads GRF_A[2] = 0.25
+    cycle  4 trigger  -
+    cycle  5 trigger  PC 0 S5 writes EVEN_BANK col 3 <- 0.5
+    cycle  6 trigger  PC 3 S1 bank read EVEN_BANK col 3 = 0.5; PC 1 S5 writes EVEN_BANK col 3 <- 0.25
+    cycle  7 bubble   PC 3 S2 bank_rd_data EVEN_BANK col 3 = 0.5
+    cycle  8 bubble   -
+    cycle  9 bubble   -
+    cycle 10 bubble   PC 3 S5 writes GRF_A[0] <- 0.5
+  GRF_A[0]: in order 0.25, write-first 0.25 (the read meets PC 1's store: rule broken in slots, result still in order)
+
+   Bank distance sweep: MOV EVEN_BANK col 3, GRF_A[1] ... MOV GRF_A[0], EVEN_BANK col 3 (NOP k-1 between), no bubbles
+   k   write-first (chosen)   read-first
+   1    0.75 old               0.75 old
+   2    0.75 old               0.75 old
+   3    0.75 old               0.75 old
+   4     0.5 ok                0.75 old
+   5     0.5 ok                 0.5 ok 
+   6     0.5 ok                 0.5 ok 
+   smallest safe k: 4 (write-first), 5 (read-first)
+
+   Random programs with bank loads and stores (seed 10), random bubbles
+   programs keeping [TOP-HAZ-3] and [TOP-HAZ-6]: 9151; equal to in-order execution: 9151
+   the same programs with a read-first bank: equal to in-order: 9111
+   programs breaking only [TOP-HAZ-6]: 2186; of them differing from in-order: 1299
+   bank reads checked against [TOP-HAZ-7] (newest store with S5 cycle <= read's S1 cycle): 33137; matching: 33137
+   the same reads against draft 0.1's 'old data' (newest store 4 or more slots earlier): matching 32248
+
+5. [TOP-PIPE-1]: every write in S5, against writing MOV and bank stores in S1 (ANEMOS)
+
+Case H: a MOV right after an ADD to the same entry (write after write)
+    PC 0  ADD GRF_A[0], GRF_A[1], GRF_A[1]
+    PC 1  MOV GRF_A[0], SRF_M[1]
+  early writes (S1 for MOV and bank stores):
+    cycle  1 trigger  -
+    cycle  2 trigger  PC 1 S1 reads SRF_M[1] (early write); PC 0 S2 reads GRF_A[1] = 0.5; PC 0 S2 reads GRF_A[1] = 0.5; PC 1 S1 writes GRF_A[0] <- 2.0
+    cycle  3 trigger  -
+    cycle  4 trigger  -
+    cycle  5 trigger  PC 0 S5 writes GRF_A[0] <- 1.0
+    cycle  6 trigger  -
+  GRF_A[0]: in order 2.0, all writes in S5 2.0, early writes 1.0
+
+Case I: a MOV 4 slots after an ADD to the same file (one write port)
+    PC 0  ADD GRF_A[0], GRF_A[1], GRF_A[1]
+    PC 1  NOP 3
+    PC 2  MOV GRF_A[1], SRF_M[1]
+  early writes (S1 for MOV and bank stores):
+    cycle  1 trigger  -
+    cycle  2 trigger  PC 0 S2 reads GRF_A[1] = 0.5; PC 0 S2 reads GRF_A[1] = 0.5
+    cycle  3 trigger  -
+    cycle  4 trigger  -
+    cycle  5 trigger  PC 2 S1 reads SRF_M[1] (early write); PC 0 S5 writes GRF_A[0] <- 1.0; PC 2 S1 writes GRF_A[1] <- 2.0
+    cycle  6 trigger  -
+    cycle  7 trigger  -
+    cycle  8 trigger  -
+    cycle  9 trigger  -
+  GRF_A[1]: in order 2.0, all writes in S5 2.0, early writes 2.0; two writes to GRF_A in cycle 5
+
 
 ok   all checks pass

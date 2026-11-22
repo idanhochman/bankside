@@ -1,0 +1,21 @@
+{
+  "signal": [
+    {"name": "clk", "wave": "p........"},
+    {"name": "trig_valid", "wave": "1....0..."},
+    {"name": "trig_col", "wave": "=....x...", "data": ["3"]},
+    {},
+    {"name": "PC 0 store", "wave": "=====x...", "data": ["S1", "S2", "S3", "S4", "S5"]},
+    {"name": "PC 1 NOP 3", "wave": "x===x....", "data": ["slot 1", "slot 2", "slot 3"]},
+    {"name": "PC 2 load", "wave": "x...=====", "data": ["S1", "S2", "S3", "S4", "S5"]},
+    {},
+    {"name": "bank_wr_col", "wave": "x...=x...", "data": ["3"]},
+    {"name": "bank_wr_data", "wave": "x...=x...", "data": ["0.5"]},
+    {"name": "bank_rd_col", "wave": "x...=x...", "data": ["3"]},
+    {"name": "bank_wr_en", "wave": "0...10...", "node": "....a...."},
+    {"name": "bank_rd_en", "wave": "0...10...", "node": "....b...."},
+    {"name": "bank_rd_data", "wave": "x....=x..", "data": ["0.5"], "node": ".....c..."}
+  ],
+  "edge": ["a~>c", "b~>c"],
+  "head": {"tick": 1},
+  "config": {"hscale": 2}
+}

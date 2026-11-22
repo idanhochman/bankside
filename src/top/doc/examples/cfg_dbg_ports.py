@@ -40,7 +40,7 @@ failures = []
 # | 0 | GRF_A | 8 (0–7) | 255:0 |      | 4, 5, 6 | none | – | – |
 FILES = {}
 for line in (DOC / "interfaces.md").read_text().splitlines():
-    m = re.match(r"^\s*\| (\d(?:, \d)*) \| (\w+) \| (?:(\d+) \(0–(\d+)\)|–) \| (?:(\d+):0|–) \|", line)
+    m = re.match(r"^\s*\| (\d(?:, \d)*) \| ([A-Z][A-Z_]*|none) \| (?:(\d+) \(0–(\d+)\)|–) \| (?:(\d+):0|–) \|", line)
     if m:
         codes = [int(c) for c in m.group(1).split(", ")]
         if m.group(2) != "none":
