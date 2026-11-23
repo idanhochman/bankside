@@ -1,6 +1,8 @@
 # fp16_mul
 
-<!-- One or two lines: what this module does. The architect fills this in. -->
+One lane of the S3 multiply: a purely combinational IEEE 754 binary16 multiplier,
+round to nearest even, subnormals in and out, NaN results 0x7E00, no flags.
+`pcu_datapath` has 16. Spec: [doc/](doc/README.md).
 
 - **Requirement ID prefix:** `FMUL` (e.g. `[FMUL-1]`). Never reused.
 - **Parent:** [pcu_datapath](../pcu_datapath/doc/), whose doc describes how this module connects

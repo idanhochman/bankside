@@ -28,7 +28,7 @@ differently, the rule says how.
 | [`pcu_ctrl`](../../pcu_ctrl/doc/README.md) | `ctrl` | `top` | `CTRL` | Stage S1: trigger, PC, loop state, NOP counter, CRF fetch, JUMP/EXIT, bank read request, `err_illegal`. Owns the S1/S2 register. | M4 |
 | [`pcu_decode`](../../pcu_decode/doc/README.md) | `dec` | `pcu_ctrl` | `DEC` | Combinational: one 32-bit instruction word to its decoded fields and an illegal flag, from [bankside_isa.yaml](bankside_isa.yaml). | M4 |
 | [`pcu_datapath`](../../pcu_datapath/doc/README.md) | `dp` | `top` | `DP` | Stages S2 to S5: source selection, SRF broadcast, ReLU, the 16 lanes of multiply and add, the MAC accumulator read, write-back and the bank write port. Owns the S2/S3, S3/S4 and S4/S5 registers. | M4 |
-| `fp16_mul` | 16, one per lane | `pcu_datapath` | `FMUL` | One FP16 multiply, combinational ([TOP-HIER-3]). | M2 |
+| [`fp16_mul`](../../fp16_mul/doc/README.md) | 16, one per lane | `pcu_datapath` | `FMUL` | One FP16 multiply, combinational ([TOP-HIER-3]). | M2 |
 | `fp16_add` | 16, one per lane | `pcu_datapath` | `FADD` | One FP16 add, combinational ([TOP-HIER-3]). | M2 |
 | [`pcu_regfile`](../../pcu_regfile/doc/README.md) | `crf`, `grf_a`, `grf_b`, `srf_m`, `srf_a` | `top` | `RF` | A parameterised register file: depth, width, number of read ports; combinational reads, write-through, one write port, no reset ([TOP-HIER-4]). | M4 |
 | `common` | – | none | `CMN` | Exists already. Holds the SystemVerilog package of types shared by several modules ([TOP-HIER-9]). | M2 |
@@ -302,7 +302,7 @@ timing; the rules it carries out are cited by their `TOP-` IDs, not copied.
 
 | Module | Its doc defines | Settled first by |
 |---|---|---|
-| `fp16_mul` | Ports (two FP16 operands, one result), combinational ([TOP-HIER-3]); × under [TOP-FP-1], [TOP-FP-2], [TOP-FP-4] to [TOP-FP-7]; worked cases for subnormals, overflow, ties and NaN | #7 (NaN result) |
+| [`fp16_mul`](../../fp16_mul/doc/README.md) | Ports (two FP16 operands, one result), combinational ([TOP-HIER-3]); × under [TOP-FP-1], [TOP-FP-2], [TOP-FP-4] to [TOP-FP-7]; worked cases for subnormals, overflow, ties and NaN | #7 (NaN result) |
 | `fp16_add` | As `fp16_mul`, for +, including the signs of zero results ([TOP-FP-5]); the timing budget: one clock period, since it sits in the bypass loop | #7 |
 | [`pcu_regfile`](../../pcu_regfile/doc/README.md) | Parameters (depth, width, number of read ports); ports, with indices of clog2(depth) bits ([TOP-HIER-6], [TOP-HIER-7]); combinational read, write-through on every port including the debug port ([TOP-HAZ-1], [TOP-IF-12]), write at the edge, no reset and no initial value ([TOP-ARCH-5], [TOP-ARCH-9]) | #8, #15 |
 | [`pcu_decode`](../../pcu_decode/doc/README.md) | Input word; the decoded instruction (fields, operand selects, indices, R, the stages used, slot count, IMM0/IMM1) and the illegal flag, for every opcode, from the yaml ([TOP-ISA-1], [TOP-ISA-2], [TOP-ISA-9], [TOP-ISA-10], [TOP-ISA-15] to [TOP-ISA-21], [TOP-ISA-24], [TOP-ISA-25]). The JUMP IMM0 check ([TOP-ISA-26]) needs the PC, so `pcu_ctrl` adds it | #6 (merged), #9, #19 |
