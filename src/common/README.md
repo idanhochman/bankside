@@ -1,6 +1,7 @@
 # common
 
-<!-- One or two lines: what this module does. The architect fills this in. -->
+Shared SystemVerilog: the package `bankside_pkg`, which holds the encoding constants of the ISA yaml and
+the decoder's types. It has no module. Spec: [doc/](doc/README.md).
 
 - **Requirement ID prefix:** `CMN` (e.g. `[CMN-1]`). Never reused.
 - **Parent:** none

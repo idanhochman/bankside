@@ -1,0 +1,16 @@
+       widths {'INSTR_W': 32, 'OPCODE_W': 4, 'OPND_W': 3}
+       opcodes {'OPCODE_NOP': 0, 'OPCODE_JUMP': 1, 'OPCODE_EXIT': 2, 'OPCODE_MOV': 4, 'OPCODE_FILL': 5, 'OPCODE_ADD': 8, 'OPCODE_MUL': 9, 'OPCODE_MAD': 10, 'OPCODE_MAC': 11}, reserved [3, 6, 7, 12, 13, 14, 15]
+       operand codes {'OPND_GRF_A': 0, 'OPND_GRF_B': 1, 'OPND_SRF_M': 2, 'OPND_SRF_A': 3, 'OPND_EVEN_BANK': 4, 'OPND_ODD_BANK': 5}, reserved [6, 7]
+       12 fields, one bit range each across 3 formats
+ok   1 [CMN-4] to [CMN-7] tables == bankside_isa.yaml
+       case C: 20000 random legal words, fields by the FLD_* constants == the model's dec_instr
+ok   2 [CMN-6] == opnd_e of DEC-12 and dec_check; case B (opcode -> dec_op_e); case C (FLD_* -> fields)
+       Verilator 5.020 2024-01-01 rev (Debian 5.020-1): the block in bankside_pkg.sv, -Wall: clean
+       case D:
+         | Option | `op` declared as | Verilator `-Wall -Wno-UNUSED` reports | Caught? |
+         |---|---|---|---|
+         | (a) | `opcode_e` | `Error-ENUMVALUE`, `Warning-WIDTHEXPAND` | yes: an error, by type |
+         | (b) | `logic [OPCODE_W-1:0]` | `Warning-WIDTHEXPAND` | only by the width mismatch |
+ok   3 [CMN-8] block == yaml rendering, lints clean; case D
+       CMN IDs ['CMN-1', 'CMN-2', 'CMN-3', 'CMN-4', 'CMN-5', 'CMN-6', 'CMN-7', 'CMN-8', 'CMN-9', 'CMN-10']
+ok   4 [CMN-2] contents == the tables and DEC-11/12/14; 27 links resolve; IDs defined once
