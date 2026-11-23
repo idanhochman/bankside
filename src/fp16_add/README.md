@@ -1,6 +1,8 @@
 # fp16_add
 
-<!-- One or two lines: what this module does. The architect fills this in. -->
+One lane of the S4 add: a purely combinational IEEE 754 binary16 adder,
+round to nearest even, subnormals in and out, an exact zero sum +0 (−0 only
+for −0 + −0), NaN results 0x7E00, no flags.
 
 - **Requirement ID prefix:** `FADD` (e.g. `[FADD-1]`). Never reused.
 - **Parent:** [pcu_datapath](../pcu_datapath/doc/), whose doc describes how this module connects
