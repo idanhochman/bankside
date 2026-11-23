@@ -1,0 +1,9 @@
+{
+  "reg": [
+    {"bits": 11, "name": "imm1"},
+    {"bits": 8, "name": "imm0"},
+    {"bits": 9},
+    {"bits": 4, "name": "opcode"}
+  ],
+  "config": {"bits": 32, "lanes": 1, "hspace": 1000, "fontsize": 12}
+}

@@ -2,26 +2,18 @@
 
 ## Block diagram
 
-The blocks below are split into modules in [hierarchy.md](hierarchy.md).
+The unit's blocks, as the papers describe them (ISCA 2021, Section III-A:
+the register files, the 16-lane FP16 multipliers and adders, and the
+control). [hierarchy.md](hierarchy.md) splits them into modules; each block
+below names the doc that specifies it.
 
-```
-            triggering command (one per slot)
-                     │
-  host cfg ──►┌──────▼──────┐
-  writes      │  CRF  32×32 │──► fetch/decode ── PC, loop counter, NOP counter
-              └─────────────┘          │
-                                       ▼ control
-  ┌──────────────┐ ┌──────────────┐ ┌───────────┐ ┌───────────┐
-  │ GRF_A 8×256  │ │ GRF_B 8×256  │ │ SRF_M 8×16│ │ SRF_A 8×16│
-  └──────┬───────┘ └──────┬───────┘ └─────┬─────┘ └─────┬─────┘
-         └────────┬───────┴───────────────┴─────────────┘
-                  ▼ operand switch (+ bank read data)
-          ┌───────────────┐   ┌───────────────┐
-          │ 16 × FP16 MUL │──►│ 16 × FP16 ADD │◄── GRF_B accumulator
-          └───────────────┘   └───────┬───────┘    (late read + bypass)
-                                      ▼
-                       write-back: GRF / SRF / bank write port
-```
+![The unit's blocks: the host's trigger and configuration write, the CRF and the fetch and decode, the four GRF and SRF files, the operand select, 16 FP16 multipliers, 16 FP16 adders with the GRF_B accumulator read, and the write-back to the register files and the bank](img/top_block.svg)
+
+*Figure 1: the blocks of the unit and the data between them. Dashed lines are
+configuration paths; the bank and the host are the testbench in v1
+([interfaces.md](interfaces.md)). Each block's second line is the doc that
+specifies it. The pipeline stages are in Figure 2. Source:
+[top_block.dot](img/top_block.dot).*
 
 ## Architecture
 
@@ -32,6 +24,23 @@ The blocks below are split into modules in [hierarchy.md](hierarchy.md).
 - **[TOP-ARCH-3]** The clock is the DRAM core clock (300 MHz target). One
   column-command slot (tCCD_L = 4 tCK at 1.2 GHz) equals one unit clock, so the
   unit must accept one instruction per cycle. **[paper]**
+- **[TOP-ARCH-11]** **The clock edge.** Every register in the unit is
+  clocked on the **rising edge** of `clk`: the control and pipeline
+  registers, the register-file entries and every output driven from a
+  register. No logic uses the falling edge. Cycle *t* is the time from one
+  rising edge to the next, and "the end of cycle *t*" (as in [TOP-HAZ-1],
+  [TOP-IF-3], [TOP-IF-4] and [TOP-IF-5]) means the rising edge between cycle
+  *t* and cycle *t* + 1. The child docs cite this rule and don't restate it.
+  **[ANEMOS]** (its clocked threads are sensitive to `clk.pos()`:
+  `src/pc_unit.h`, `src/instr_decoder.h`, and the register-file writes of
+  `src/rf_twoport.h` and `src/rf_threeport.h`, at `f2d4018`; read, not run),
+  **[bankside]** (one edge for the whole unit). The papers don't say which
+  edge. Options weighed (#44): (a) this one top rule (chosen); (b) leave the
+  edge to each child doc. Under (b) every child restates it, and a child
+  that chose the falling edge would split a cycle in two at its boundary:
+  a `pcu_regfile` written on the falling edge of cycle *t* would show an S5
+  write to the S2 read of the same cycle's second half without
+  write-through, a timing no rule of this spec describes.
 
 ### Register files
 
@@ -61,7 +70,10 @@ one debug read port, which the synthesis wrapper ties off ([TOP-HIER-7]).
   ([TOP-IF-10]) and never cleared (not by reset either), and reports as an
   error any read of an entry whose flag is clear: a source read in S2, a MAC
   accumulator read in S4, or the CRF entry of an instruction that executes.
-  Debug reads ([TOP-IF-11]) are not reported. **[bankside]**
+  Debug reads ([TOP-IF-11]) are not reported. The model starts at the end
+  of the first cycle with `rst_n` = 0 ([TOP-IF-13]), with every flag
+  clear: a write before then may happen in the hardware but can't be relied
+  on, so it sets no flag. **[bankside]**
   The five files hold 5376 bits (CRF 32 × 32 = 1024, GRF_A and GRF_B
   2 × 8 × 256 = 4096, SRF_M and SRF_A 2 × 8 × 16 = 256; draft 0.1 said
   "about 4.6 kbit"). Not resetting them saves the reset input of every one of
@@ -81,12 +93,20 @@ one debug read port, which the synthesis wrapper ties off ([TOP-HIER-7]).
   comparison sees the difference only in a kernel that reads an entry it
   never wrote, which [TOP-ARCH-5] forbids.
 - **[TOP-ARCH-9]** **Reading an entry never written.** An entry not written
-  since power-up holds its **power-up value**: a bit pattern the spec doesn't
-  predict, which may differ from entry to entry and from one power-up to the
-  next. **[bankside]** Precisely:
+  since the end of the first cycle with `rst_n` = 0 holds its **power-up
+  value**: the bits it holds at the end of that cycle, a pattern the spec
+  doesn't predict, which may differ from entry to entry and from one
+  power-up to the next. **[bankside]** Precisely:
   - Every read of the entry returns the same bits, on every read port and the
-    debug port ([TOP-IF-11]), until the entry is first written. Reset doesn't
-    change them ([TOP-ARCH-5]).
+    debug port ([TOP-IF-11]), from the cycle after the first reset cycle
+    until the entry is next written. A later reset doesn't change them
+    ([TOP-ARCH-5]).
+  - The first reset can. Up to and including the first cycle with `rst_n` =
+    0, the S5 write enables have no defined value, so an entry may be
+    written with undefined data then ([TOP-IF-13]). So the "power-up value"
+    is the value at the end of the first reset cycle, not at power-up: a
+    debug read in a cycle before it may differ from one after it, and
+    neither is predicted.
   - An instruction that reads it computes with those bits like with any
     others: data movement copies them, arithmetic treats them as FP16 values
     (a NaN among them gives 0x7E00, [TOP-FP-6]). Nothing is flagged in
@@ -166,6 +186,15 @@ what is read and written in each.
 | S3 | MULT | 16 FP16 multipliers (MUL, MAD, MAC). Other instructions pass through. |
 | S4 | ADD | 16 FP16 adders (ADD, MAD, MAC). MAC reads its accumulator here. Others pass through. |
 | S5 | Write-back | Write the GRF or SRF, or drive the bank write port. |
+
+![The five stages and their registers: S1 and the S1/S2 register in pcu_ctrl; S2, S3, S4, S5 and the S2/S3, S3/S4, S4/S5 registers in pcu_datapath; the CRF read in S1, the register-file and bank reads in S2, the GRF_B accumulator read in S4, and the S5 writes](img/top_pipeline.svg)
+
+*Figure 2: the pipeline, left to right, and the module that holds each stage
+([TOP-HIER-2]). Bold boxes are the stage registers, clocked on the rising
+edge ([TOP-ARCH-11]). The register-file reads are combinational and
+write-through ([TOP-HAZ-1]); the S5 writes go back to the register files
+through `top`'s write-port select ([TOP-HIER-6]) and to the bank on
+`bank_wr_*` ([TOP-IF-3]). Source: [top_pipeline.dot](img/top_pipeline.dot).*
 
 - **[TOP-PIPE-1]** **Every write is in S5.** Every instruction passes
   through all five stages in order, one stage per cycle, so an instruction
@@ -336,7 +365,7 @@ but they carry nothing, so no register value depends on them.
 
 ![Case A: the ADD's S2 read in cycle 5 meets the MOV's S5 write of GRF_A[1]](img/hazard_distance_3.svg)
 
-*Figure 1: case A, [TOP-HAZ-1] and [TOP-HAZ-3]. The MOV writes GRF_A[1] in S5
+*Figure 3: case A, [TOP-HAZ-1] and [TOP-HAZ-3]. The MOV writes GRF_A[1] in S5
 in cycle 5 (marker a); the ADD, issued 3 slots later, reads it in S2 in the
 same cycle (marker b) and gets the new value through write-through. Source:
 [hazard_distance_3.wave.json](img/hazard_distance_3.wave.json).*
@@ -354,8 +383,42 @@ in-order execution:
 
 The S2 consumer is case A's ADD; the accumulator case is
 `MOV GRF_B[2], SRF_M[1]` followed by `MAC GRF_B[2], GRF_A[1], SRF_M[2]`.
-Case D of the script traces back-to-back MACs right after the MOV that writes
-their accumulator ([TOP-HAZ-4]).
+
+**Case D: back-to-back MACs right after their producer**, [TOP-HAZ-2] and
+[TOP-HAZ-4]. One trigger per cycle in cycles 1 to 3. Lane 0 values; before
+the program GRF_A[1] = 0.5, GRF_B[2] = 0.25, SRF_M[0] = 1.0, SRF_M[1] = 2.0,
+SRF_M[2] = 3.0.
+
+```
+PC 0  MOV GRF_B[2], SRF_M[1]               ; GRF_B[2] <- 2.0
+PC 1  MAC GRF_B[2], GRF_A[1], SRF_M[0]     ; += 0.5 x 1.0
+PC 2  MAC GRF_B[2], GRF_A[1], SRF_M[2]     ; += 0.5 x 3.0
+```
+
+| Cycle | S1 | S2 | S4 | S5 |
+|---|---|---|---|---|
+| 1 | PC 0 | – | – | – |
+| 2 | PC 1 | PC 0: reads SRF_M[1] = 2.0 | – | – |
+| 3 | PC 2 | PC 1: reads GRF_A[1] = 0.5, SRF_M[0] = 1.0 | – | – |
+| 4 | – | PC 2: reads GRF_A[1] = 0.5, SRF_M[2] = 3.0 | – | – |
+| 5 | – | – | PC 1: accumulator GRF_B[2] = **2.0 (bypass)**; 2.0 + 0.5 = 2.5 | PC 0: GRF_B[2] ← 2.0 |
+| 6 | – | – | PC 2: accumulator GRF_B[2] = **2.5 (bypass)**; 2.5 + 1.5 = 4.0 | PC 1: GRF_B[2] ← 2.5 |
+| 7 | – | – | – | PC 2: GRF_B[2] ← 4.0 |
+
+Each MAC reads its accumulator in S4 in the cycle the instruction just
+before it writes that entry in S5, and gets the S5 value: GRF_B[2] ends as
+4.0, as in-order execution gives. Without the bypass the reads in cycles 5
+and 6 return 0.25 and 2.0, and GRF_B[2] ends as 3.5. In `top` the bypass is
+`grf_b`'s write-through on its S4 port ([TOP-HIER-5]).
+
+![Case D: each MAC's S4 accumulator read meets the S5 write of the instruction before it](img/mac_accumulator_bypass.svg)
+
+*Figure 4: case D, [TOP-HAZ-2] and [TOP-HAZ-4]. The MOV writes GRF_B[2] in
+S5 in cycle 5 (marker a) and the first MAC reads it in S4 in the same cycle
+(b); the first MAC writes in cycle 6 (c) and the second reads it there (d).
+[figures_check.py](examples/figures_check.py) checks every cell against
+`hazard_trace.py`'s model. Source:
+[mac_accumulator_bypass.wave.json](img/mac_accumulator_bypass.wave.json).*
 
 The script also runs 20000 random programs (2 to 8 instructions over six
 entries, random NOPs and random bubbles, seed 8). All 8159 that keep
@@ -686,7 +749,7 @@ store is applied first, so `bank_rd_data` in cycle 6 is 0.5 and GRF_A[0] gets
 
 ![Case E: the load's bank read request and the store's bank write fall in cycle 5](img/bank_store_load.svg)
 
-*Figure 2: case E, [TOP-IF-2], [TOP-IF-3] and [TOP-HAZ-6]. "PC 0 store" is
+*Figure 5: case E, [TOP-IF-2], [TOP-IF-3] and [TOP-HAZ-6]. "PC 0 store" is
 `MOV EVEN_BANK, GRF_A[1]` and "PC 2 load" is `MOV GRF_A[0], EVEN_BANK`. The
 store drives `bank_wr_*` in its S5 cycle, cycle 5 (marker a). The load, issued 4 slots
 later, drives `bank_rd_*` in the same cycle (marker b). The bank applies the

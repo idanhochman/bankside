@@ -1,0 +1,17 @@
+{
+  "signal": [
+    {"name": "clk", "wave": "p......."},
+    {"name": "rst_n", "wave": "1.01....", "node": "..a....."},
+    {"name": "trig_valid", "wave": "0...10.."},
+    {},
+    {"name": "busy", "wave": "x..0.1..", "node": "...b...."},
+    {"name": "err_illegal", "wave": "x..0...."},
+    {"name": "bank_wr_en", "wave": "x..0...."},
+    {"name": "grf_*_wr_en, srf_*_wr_en (dp)", "wave": "x..0...."},
+    {"name": "bank_rd_en", "wave": "0...10.."},
+    {"name": "a cfg_wr_en = 1 would take effect", "wave": "x..10..."}
+  ],
+  "edge": ["a~>b"],
+  "head": {"tick": 1},
+  "config": {"hscale": 2}
+}

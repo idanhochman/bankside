@@ -88,6 +88,14 @@ rules this module carries out are those of the top spec:
 [TOP-HIER-8]: ../../top/doc/hierarchy.md#how-top-connects-its-children
 [TOP-HIER-9]: ../../top/doc/hierarchy.md#shared-package-and-the-wrapper
 [VER-4]: ../../top/dv/README.md
+[TOP-ARCH-11]: ../../top/doc/theory_of_operation.md#architecture
+[TOP-IF-13]: ../../top/doc/interfaces.md#timing
+[DEC-11]: ../../pcu_decode/doc/README.md#the-decoded-instruction
+[DEC-13]: ../../pcu_decode/doc/README.md#the-decoded-instruction
+[FMUL-1]: ../../fp16_mul/doc/README.md#ports
+[FMUL-10]: ../../fp16_mul/doc/README.md#the-result
+[FADD-1]: ../../fp16_add/doc/README.md#ports
+[FADD-11]: ../../fp16_add/doc/README.md#timing
 [VER-6]: ../../top/dv/README.md
 
 The `pcu_ctrl` rules cited here are in [its doc](../../pcu_ctrl/doc/README.md)
@@ -112,10 +120,9 @@ spec's
 ReLU on SRF and bank destinations ([TOP-ISA-30]), every write in S5
 ([TOP-PIPE-1]) and GRF_B's own accumulator port ([TOP-ARCH-10]).
 
-**Clock edge.** Every register here is clocked on the **rising edge** of
-`clk`, and "the end of cycle *t*" is the rising edge between cycles *t* and
-*t* + 1. The top spec doesn't state the edge yet (#44); this doc assumes the
-rising edge, as `pcu_regfile`'s and `pcu_ctrl`'s do. **[bankside]**
+**Clock edge.** Every register here is clocked on the rising edge of `clk`,
+and "the end of cycle *t*" is the rising edge between cycles *t* and *t* + 1,
+as the top spec's [TOP-ARCH-11] states for the whole unit.
 
 **Lanes.** A 256-bit value has 16 lanes; lane *l* is bits 16*l* + 15 to
 16*l* ([TOP-ISA-29]). "Lane 0 values" in the examples are bits 15 to 0.
@@ -175,8 +182,9 @@ rising edge, as `pcu_regfile`'s and `pcu_ctrl`'s do. **[bankside]**
   | `busy` | out | 1 | registered, or an OR of registers ([DP-15]) | `pcu_datapath`'s term of the top `busy` |
 
   `dec_instr_t` is the decoded-instruction type of the shared package
-  ([TOP-HIER-9]); its fields are defined by `pcu_decode`'s doc (#31). The
-  bank-write and `busy` ports go to the top ports and the `busy` OR
+  ([TOP-HIER-9]); its fields are defined by
+  [`pcu_decode`'s doc](../../pcu_decode/doc/README.md#the-decoded-instruction)
+  ([DEC-11]). The bank-write and `busy` ports go to the top ports and the `busy` OR
   ([TOP-HIER-8]); the S5 writes go to `top`'s write-port select, which
   passes each file's bundle to that file's write port when no configuration
   write takes it ([TOP-HIER-6]).
@@ -243,12 +251,9 @@ right.
   `bank_wr_en` may be 0 or 1, so a register-file entry or a bank column may
   be written with undefined data in those cycles, the first reset cycle
   included. The unit must be reset before its first trigger, and the host
-  must not count on any value written before the end of that reset.
-  **[bankside]** This is the rule CTRL-4 gives `pcu_ctrl`'s registers,
-  applied to this module's; #46 asks for it once in the top spec, and this
-  doc will cite that rule when it exists. It is option (a) of #46: the
-  registers get no power-up value, as [TOP-ARCH-9] already chooses for the
-  register files.
+  must not count on any value written before the end of that reset. This
+  is the top spec's [TOP-IF-13] for this module's registers, as CTRL-4 is
+  for `pcu_ctrl`'s.
 
 - **[DP-5]** **Valid bits and reset.** At the end of every cycle:
   - with `rst_n` = 1: `s3_valid` ← `iss_valid`, `s4_valid` ← `s3_valid`,
@@ -279,7 +284,9 @@ right.
   `iss_instr` is either `DEC_NOP` or the decoded instruction of a legal
   MOV, FILL, ADD, MUL, MAD or MAC word (CTRL-12: every other slot kind
   issues `DEC_NOP`). From it `pcu_datapath` uses only these, named and
-  encoded by `pcu_decode`'s doc (#31):
+  encoded by
+  [`pcu_decode`'s doc](../../pcu_decode/doc/README.md#the-decoded-instruction)
+  ([DEC-11], [DEC-13]):
 
   | Information | From the word ([bankside_isa.yaml](../../top/doc/bankside_isa.yaml)) | Used for |
   |---|---|---|
@@ -368,9 +375,11 @@ right.
   of *a* and of *b* and gives lane *l* of *x*. For the other operations
   *x* = *a*. *y* = *b* for ADD, *y* = *c* broadcast to 16 lanes for MAD, and
   don't-care otherwise. **[paper]** (16 FP16 multipliers in the MULT stage),
-  **[ANEMOS]** (one multiplier per lane). Which operand goes to which input of
-  `fp16_mul` is set when its doc names the inputs (#33); × is commutative
-  under [TOP-FP-5] and [TOP-FP-6], so the result doesn't depend on it.
+  **[ANEMOS]** (one multiplier per lane). Lane *l* of *a* goes to the
+  multiplier's `.a`, lane *l* of *b* to its `.b`, and its `.p` is lane *l*
+  of *x* ([`fp16_mul`'s ports](../../fp16_mul/doc/README.md#ports),
+  [FMUL-1]); the unit is commutative ([FMUL-10]), so the result doesn't
+  depend on that order.
 
 - **[DP-11]** **S4, add and the MAC accumulator.** The 16 `fp16_add`
   compute, lane by lane:
@@ -459,8 +468,10 @@ right.
 
   ```systemverilog
   for (genvar l = 0; l < 16; l++) begin : g_lane
-    fp16_mul u_mul ( /* lane l of a and b in, lane l of the product out */ );
-    fp16_add u_add ( /* lane l of the two S4 operands in, lane l of r out */ );
+    fp16_mul u_mul (.a(/* lane l of a */), .b(/* lane l of b */), .p(/* lane l of x */));
+    fp16_add u_add (.a(/* lane l of the first S4 operand */),
+                    .b(/* lane l of the second S4 operand */),
+                    .s(/* lane l of the sum, from which r is chosen */));
   end
   ```
 
@@ -468,9 +479,14 @@ right.
   from `top`, `dp.g_lane[l].u_mul` and `dp.g_lane[l].u_add`. Lane *l* takes
   and gives bits `[16l+15 : 16l]` ([TOP-HIER-3], [TOP-ISA-29]). No signal
   crosses between lanes, except the SRF broadcast ([DP-8]) and the SRF
-  write of lane 0 ([DP-13]). The units' ports are defined by their own docs,
-  `fp16_mul` (#33) and `fp16_add` (#34); this doc connects them by the
-  meaning above and doesn't define them. Both units are combinational: no
+  write of lane 0 ([DP-13]). The units' ports `.a`, `.b`, `.p` and `.a`,
+  `.b`, `.s` are defined by their own docs,
+  [`fp16_mul`'s](../../fp16_mul/doc/README.md#ports) ([FMUL-1]) and
+  [`fp16_add`'s](../../fp16_add/doc/README.md#ports) ([FADD-1]); this doc
+  connects them by the meaning above and doesn't define them. The two S4
+  operands are those of the [DP-11] table (*x* and *y* for ADD and MAD,
+  *acc* and *x* for MAC), on either port: the sum doesn't depend on the
+  order. Both units are combinational: no
   clock, no reset ([TOP-HIER-3]). **[bankside]**, **[ANEMOS]** (one unit of
   each per lane).
 
@@ -496,8 +512,10 @@ right.
   `top`'s write-port select ([TOP-HIER-6]) → `grf_b`'s write-through
   multiplexer on port 2 → `grf_b_rd_data[2]` → `fp16_add` → the choice of
   *r* → the S4/S5 register. `fp16_add` gets the clock period minus the
-  select, the write-through multiplexer and the setup; its doc (#34) gives
-  that budget. The synthesis run measures both paths against the clock
+  S4/S5 register's clock-to-output, the select, the write-through
+  multiplexer, the choice of *r* and the setup: every other item on the
+  loop. Its doc gives that budget
+  ([FADD-11](../../fp16_add/doc/README.md#timing)). The synthesis run measures both paths against the clock
   period ([TOP-ARCH-3]).
 
 ![Case A at pcu_datapath's ports: back-to-back MACs read their accumulator through grf_b port 2 in the cycle the write before them is in S5, and the store writes the bank in cycle 10 at its own column](img/dp_gemv.svg)
@@ -534,11 +552,13 @@ doc with the four GRF and SRF instances of `pcu_regfile` (write-through,
 CTRL-12) and the v1 bank (the store applied first on a shared edge,
 [TOP-IF-3]). `fp16_mul` and `fp16_add` are stood in for by double-precision
 arithmetic rounded once to binary16, which is correctly rounded with ties
-to even ([TOP-FP-2]), with NaN results 0x7E00 ([TOP-FP-6]), until their docs
-exist (#33, #34). Words are assembled and checked by the top spec's own
+to even ([TOP-FP-2]), with NaN results 0x7E00 ([TOP-FP-6]): the function
+their docs specify ([FMUL-1], [FADD-1]), whose own scripts check it on all
+2³² pairs. Words are assembled and checked by the top spec's own
 [check_isa.py](../../top/doc/examples/check_isa.py), and the decoded
-instruction is the word's yaml fields until `pcu_decode`'s doc exists
-(#31). The script also checks:
+instruction is the word's yaml fields, which
+[`pcu_decode`'s script](../../pcu_decode/doc/examples/dec_check.py) checks
+against that module's model. The script also checks:
 
 - Figure 1, cell by cell, against case A;
 - case A against the top spec's

@@ -78,6 +78,14 @@ carries out are those of the top spec:
 [RF-4]: ../../pcu_regfile/doc/README.md
 [RF-13]: ../../pcu_regfile/doc/README.md
 [TOP-HIER-9]: ../../top/doc/hierarchy.md#shared-package-and-the-wrapper
+[TOP-ARCH-11]: ../../top/doc/theory_of_operation.md#architecture
+[TOP-IF-13]: ../../top/doc/interfaces.md#timing
+[CMN-7]: ../../common/doc/README.md#the-constants
+[DEC-2]: ../../pcu_decode/doc/README.md#ports
+[DEC-5]: ../../pcu_decode/doc/README.md#the-illegal-flag
+[DEC-10]: ../../pcu_decode/doc/README.md#the-bank-read
+[DEC-11]: ../../pcu_decode/doc/README.md#the-decoded-instruction
+[DEC-14]: ../../pcu_decode/doc/README.md#the-decoded-instruction
 
 **Sources.** The papers give the zero-cycle JUMP and the loop and NOP
 instructions ([TOP-ISA-4], [TOP-PIPE-3]), not how the fetch is built, so the
@@ -94,10 +102,9 @@ there on purpose; the
 [programmer's guide](../../top/doc/programmers_guide.md#differences-from-anemos)
 lists that difference.
 
-**Clock edge.** Every register here is clocked on the **rising edge** of
-`clk`, and "the end of cycle *t*" is the rising edge between cycles *t* and
-*t* + 1. The top spec doesn't state the edge yet (#44); this doc assumes the
-rising edge, as `pcu_regfile`'s does. **[bankside]**
+**Clock edge.** Every register here is clocked on the rising edge of `clk`,
+and "the end of cycle *t*" is the rising edge between cycles *t* and *t* + 1,
+as the top spec's [TOP-ARCH-11] states for the whole unit.
 
 ## Parameters
 
@@ -143,7 +150,10 @@ rising edge, as `pcu_regfile`'s does. **[bankside]**
   | `err_illegal` | out | 1 | registered ([CTRL-10]) | The top `err_illegal`, sticky |
 
   `dec_instr_t` is the decoded-instruction type of the shared package
-  ([TOP-HIER-9]); its fields are defined by `pcu_decode`'s doc (#31).
+  ([TOP-HIER-9]); its fields are defined by
+  [`pcu_decode`'s doc](../../pcu_decode/doc/README.md#the-decoded-instruction)
+  ([DEC-11]), and `iss_instr` is loaded from that module's `dec_instr`
+  output ([CTRL-12], [CTRL-15]).
 
 - **[CTRL-3]** **The fetch uses two CRF read ports.** `top` instantiates
   `crf` with `N_RD` = 2 and connects `crf_rd_idx` and `crf_rd_data`
@@ -196,8 +206,9 @@ to differ, the rule is right.
 
   At the rising edge that ends a cycle with `rst_n` = 0, every register with
   a reset value takes it ([TOP-IF-4]); the registers without one may change
-  or not. Before the first such edge after power-up, the state is undefined:
-  the unit must be reset before its first trigger.
+  or not. Before the first such edge after power-up, the state is undefined,
+  and the unit must be reset before its first trigger, as the top spec's
+  [TOP-IF-13] states for the whole unit.
 
 - **[CTRL-5]** **Slots and reset.** A cycle is a **slot** if and only if
   `trig_valid` = 1 and `rst_n` = 1 ([TOP-IF-1], [TOP-PIPE-4]). This settles
@@ -227,7 +238,9 @@ to differ, the rule is right.
 - **[CTRL-7]** **A JUMP at port 0.** *w0* is a **JUMP** if its opcode field
   (bits 31–28, the same in every format of
   [bankside_isa.yaml](../../top/doc/bankside_isa.yaml)) holds JUMP's opcode
-  (1). Its IMM0 and IMM1 are bits 18–11 and 10–0 (the yaml's control format).
+  (1). Its IMM0 and IMM1 are bits 18–11 and 10–0 (the yaml's control format;
+  in the RTL the `FLD_OPCODE_*`, `FLD_IMM0_*` and `FLD_IMM1_*` constants of
+  `bankside_pkg`, [CMN-7]).
   - **Range check** ([TOP-ISA-26]). The JUMP is **out of range** if IMM0 = 0
     or IMM0 > `pc`, compared as unsigned 8-bit numbers with `pc`
     zero-extended. **[bankside]**
@@ -364,16 +377,18 @@ to differ, the rule is right.
 
 - **[CTRL-15]** **The child `dec`.** `pcu_ctrl` has one instance of
   `pcu_decode`, `dec` ([TOP-HIER-1]). Its input is *w*, the slot's word of
-  [CTRL-8], in every cycle. `pcu_ctrl` uses three of its outputs, whose
-  names and encodings are defined by `pcu_decode`'s doc (#31):
-  1. the **illegal** flag: [TOP-ISA-2] for the word alone. A JUMP word is
+  [CTRL-8], in every cycle (`dec.instr` = *w*). `pcu_ctrl` uses all four of
+  its outputs, whose names and encodings are defined by
+  [`pcu_decode`'s doc](../../pcu_decode/doc/README.md#ports) ([DEC-2]):
+  1. `illegal`: [TOP-ISA-2] for the word alone ([DEC-5]). A JUMP word is
      never illegal to `pcu_decode`, since its range check needs the PC;
      `pcu_ctrl` makes that check ([CTRL-7]).
-  2. the **bank read**: whether *w*, if legal, has a bank source (its SRC0,
-     or for the ALU format its SRC1, is EVEN_BANK or ODD_BANK), and which
-     bank.
-  3. the **decoded instruction** (`dec_instr_t`), and the constant
-     `DEC_NOP` that equals its value for the word 0x00000000.
+  2. `bank_rd` and `bank_sel`: whether *w*, if legal, has a bank source
+     (its SRC0, or for the ALU format its SRC1, is EVEN_BANK or ODD_BANK),
+     and which bank ([DEC-10]).
+  3. `dec_instr`, the decoded instruction (`dec_instr_t`, [DEC-11]), and
+     the constant `DEC_NOP` that equals its value for the word 0x00000000
+     ([DEC-14]).
 
   `pcu_ctrl` reads the opcode, IMM0 and IMM1 of *w0*, *w1* and *w* from the
   word's bits ([CTRL-7]), not through `dec`: *w0* is needed before *w* is
@@ -431,8 +446,13 @@ All six cases come from one script, a cycle-level model of this doc with
 `crf`, the configuration write gate of [TOP-IF-8] and `pcu_datapath`'s valid
 bits around it. It assembles every word from
 [bankside_isa.yaml](../../top/doc/bankside_isa.yaml) through the top spec's
-own [check_isa.py](../../top/doc/examples/check_isa.py), which also stands in
-for `pcu_decode` until its doc exists. It also checks:
+own [check_isa.py](../../top/doc/examples/check_isa.py). The child `dec` is
+`pcu_decode`'s own model, the `model()` of
+[dec_check.py](../../pcu_decode/doc/examples/dec_check.py): its `illegal`,
+`bank_rd` and `bank_sel` decide the slot kind and the bank read ([CTRL-8],
+[CTRL-11]), and its `dec_instr` is what an OP slot issues ([CTRL-12]).
+Loading it runs `dec_check.py`'s own checks first, so the script takes
+about a minute. It also checks:
 
 - Figure 1, cell by cell, against case A;
 - the range check of [CTRL-7] against `check_isa.py`'s `legal(word, pc)`

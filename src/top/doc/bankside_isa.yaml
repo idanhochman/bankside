@@ -3,8 +3,12 @@
 # The spec tables (programmers_guide.md), the SystemVerilog package, the
 # Python decoder/assembler and the legal-combination coverage bins are meant to
 # be generated from this file (generators come with the reference model, M3 in
-# pm/milestones.md). Until then the doc tables are written by hand and must
-# match; examples/check_isa.py checks the format table and the counts.
+# pm/milestones.md). Until then they are written by hand and must match:
+# examples/check_isa.py checks the guide's tables and the counts,
+# examples/figures_check.py the bitfield figures (img/instr_*.reg.json),
+# src/common/doc/examples/pkg_check.py the package block of the common doc
+# (bankside_pkg, [CMN-8]) and src/pcu_decode/doc/examples/dec_check.py the
+# decoder's legality and fields against this file.
 #
 # Requirement IDs in comments ([TOP-...]) point to the prose rule.
 #
@@ -13,7 +17,7 @@
 # ANEMOS (github.com/gem5-X/cnm_framework, BSD-3); everything else is
 # bankside's own.
 
-version: 0.1-draft
+version: "1.0"   # v1, closed in M1 (#13); was 0.1-draft
 
 instruction_width: 32
 

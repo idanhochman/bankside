@@ -14,35 +14,34 @@ digraph top_connections {
     style=rounded;
 
     crf   [label="{{<wr>write}|crf: pcu_regfile\n32 × 32|{<rd>read}}"];
-    wsel  [label="write-port\nselect\n(top glue)", shape=box];
+    wsel  [label="cfg_wr_en gate,\nwrite-port select\n(top glue, TOP-HIER-6)", shape=box];
     ctrl  [label="{{<fetch>fetch|<trig>trigger}|ctrl: pcu_ctrl\n(pcu_ctrl/doc)|{<busy>busy, err_illegal|<brd>bank read request|<issue>issue}}"];
-    rf    [label="{<wa>write|grf_a: pcu_regfile\n8 × 256|<ra>read × 2}|{<wb>write|grf_b: pcu_regfile\n8 × 256|<rb>read × 2 + 1}|{<wm>write|srf_m: pcu_regfile\n8 × 16|<rm>read × 1}|{<ws>write|srf_a: pcu_regfile\n8 × 16|<rs>read × 1}"];
+    rf    [label="{<wa>write|grf_a: pcu_regfile\n8 × 256|<ra>read × 2}|{<wb>write|grf_b: pcu_regfile\n8 × 256|{<rb>read 0, 1|<rb2>read 2}}|{<wm>write|srf_m: pcu_regfile\n8 × 16|<rm>read × 1}|{<ws>write|srf_a: pcu_regfile\n8 × 16|<rs>read × 1}"];
     dp    [label="{{<issue>issue|<s2>S2 reads|<s4>S4 accumulator read|<s5>S5 write}|dp: pcu_datapath\n(pcu_datapath/doc)|{<busy>busy|<bdata>bank_rd_data|<bwr>bank_wr_*}}"];
   }
 
   { rank=same; trig; cfg; }
-  { rank=same; crf; wsel; }
   { rank=same; ctrl; rf; }
   { rank=same; bport; st; }
 
-  cfg -> crf:wr [style=dashed, label="CRF write"];
-  cfg -> wsel [style=dashed, label="GRF/SRF write"];
+  cfg -> wsel [style=dashed, label="cfg_*"];
+  wsel -> crf:wr [style=dashed, label="CRF write"];
   trig -> ctrl:trig;
-  crf:rd -> ctrl:fetch [label="fetch: word 32"];
+  crf:rd -> ctrl:fetch [label="crf_rd_*: 2 × 32"];
   wsel -> rf:wa;
   wsel -> rf:wb;
   wsel -> rf:wm;
   wsel -> rf:ws;
-  wsel -> dp:s5 [dir=back, label="S5 write"];
-  ctrl:issue -> dp:issue [label="issue (S1/S2 register)"];
-  rf:ra -> dp:s2 [label="256"];
-  rf:rb -> dp:s2 [label="256"];
-  rf:rb -> dp:s4 [label="256"];
+  wsel -> dp:s5 [dir=back, label="S5 write bundles,\none per file"];
+  ctrl:issue -> dp:issue [label="iss_* (S1/S2 register)"];
+  rf:ra -> dp:s2 [label="2 × 256"];
+  rf:rb -> dp:s2 [label="2 × 256"];
+  rf:rb2 -> dp:s4 [label="grf_b_rd_*[2], 256"];
   rf:rm -> dp:s2 [label="16"];
   rf:rs -> dp:s2 [label="16"];
   ctrl:brd -> bport [label="request"];
-  ctrl:busy -> st;
-  dp:busy -> st [label="OR"];
+  ctrl:busy -> st [label="busy (ORed), err_illegal"];
+  dp:busy -> st [label="busy, ORed"];
   dp:bdata -> bport [dir=back, label="256"];
   dp:bwr -> bport [label="256"];
 }

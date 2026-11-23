@@ -1,0 +1,50 @@
+digraph top_pipeline {
+  graph [rankdir=LR, fontname="Helvetica", fontsize=11, nodesep=0.35, ranksep=0.45,
+         newrank=true, labeljust=l];
+  node  [shape=box, fontname="Helvetica", fontsize=10, height=0.3];
+  edge  [fontname="Helvetica", fontsize=9, arrowsize=0.7];
+
+  trig [label="trig_*", shape=plaintext];
+  crf  [label="crf\nports 0, 1\n(pcu_regfile/doc)"];
+  rd2  [label="grf_a ports 0, 1\ngrf_b ports 0, 1\nsrf_m port 0, srf_a port 0\n(pcu_regfile/doc)"];
+  brd  [label="bank_rd_data", shape=plaintext];
+  rd4  [label="grf_b port 2\n(write-through)\n(pcu_regfile/doc)"];
+  wsel [label="write-port select\n(top glue, TOP-HIER-6)", shape=box];
+  bout [label="bank_rd_*\n(request)", shape=plaintext];
+  bwr  [label="bank_wr_*", shape=plaintext];
+
+  subgraph cluster_ctrl {
+    label="ctrl: pcu_ctrl\n(pcu_ctrl/doc)";
+    style=rounded;
+    s1   [label="S1\nfetch, JUMP,\ndecode (dec)"];
+    r12  [label="S1/S2\nregister", shape=box, style=bold];
+  }
+  subgraph cluster_dp {
+    label="dp: pcu_datapath\n(pcu_datapath/doc)";
+    style=rounded;
+    s2   [label="S2\noperands,\nbroadcast, ReLU"];
+    r23  [label="S2/S3\nregister", shape=box, style=bold];
+    s3   [label="S3\n16 × fp16_mul"];
+    r34  [label="S3/S4\nregister", shape=box, style=bold];
+    s4   [label="S4\n16 × fp16_add"];
+    r45  [label="S4/S5\nregister", shape=box, style=bold];
+  }
+
+  { rank=same; trig; crf; }
+
+  trig -> s1;
+  crf -> s1 [label="words, 2 × 32"];
+  s1 -> bout;
+  s1 -> r12;
+  r12 -> s2 [label="iss_*"];
+  rd2 -> s2 [label="sources"];
+  brd -> s2 [label="256"];
+  s2 -> r23;
+  r23 -> s3;
+  s3 -> r34;
+  r34 -> s4;
+  rd4 -> s4 [label="accumulator, 256"];
+  s4 -> r45;
+  r45 -> wsel [label="S5 write bundles"];
+  r45 -> bwr [label="S5"];
+}

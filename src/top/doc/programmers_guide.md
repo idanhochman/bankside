@@ -14,6 +14,26 @@ All instructions are 32 bits. **[paper]** (Table III) for the field layout.
 | **Data** | OPCODE | DST | SRC0 | – | – | – | – | R | – | DST# | – | SRC0# | – | – |
 | **ALU** | OPCODE | DST | SRC0 | SRC1 | SRC2 | A | – | – | – | DST# | – | SRC0# | – | SRC1# |
 
+The same three formats as bitfields, bit 0 on the right, with the yaml's
+field names (`dst_idx` is DST#, `aam` is A, `relu` is R); grey bits are
+unused ([TOP-ISA-1]). [figures_check.py](examples/figures_check.py) checks
+each against the yaml.
+
+![The control format: opcode 31-28, unused 27-19, imm0 18-11, imm1 10-0](img/instr_control.svg)
+
+*Figure 1: the control format (NOP, JUMP, EXIT). Source:
+[instr_control.reg.json](img/instr_control.reg.json).*
+
+![The data format: opcode 31-28, dst 27-25, src0 24-22, unused 21-13, relu 12, unused 11, dst_idx 10-8, unused 7, src0_idx 6-4, unused 3-0](img/instr_data.svg)
+
+*Figure 2: the data format (MOV, FILL). Source:
+[instr_data.reg.json](img/instr_data.reg.json).*
+
+![The ALU format: opcode 31-28, dst 27-25, src0 24-22, src1 21-19, src2 18-16, aam 15, unused 14-11, dst_idx 10-8, unused 7, src0_idx 6-4, unused 3, src1_idx 2-0](img/instr_alu.svg)
+
+*Figure 3: the ALU format (ADD, MUL, MAD, MAC). Source:
+[instr_alu.reg.json](img/instr_alu.reg.json).*
+
 - Control: **IMM0** is bits 18–11 (8 bits), **IMM1** is bits 10–0 (11 bits).
 - **R** is the ReLU flag (data format), **A** the AAM flag (ALU format).
 - **DST#, SRC0#, SRC1#** are 3-bit register indices, one per operand field.
@@ -675,11 +695,14 @@ was meant. An assertion flags each of them in simulation and the reference
 model reports it as an error. The assembler also rejects the program when the
 rule can be seen in the program text ([TOP-HAZ-3], [TOP-ISA-6], [TOP-ISA-7],
 [TOP-ISA-14]); [TOP-HAZ-6] depends on the addresses the host sends and
-[TOP-IF-6] on the host itself, so the assembler can't check those.
+[TOP-IF-6] and [TOP-IF-13] on the host itself, so the assembler can't check
+those.
 
-What the hardware does when a rule is broken is specified for every rule, so
-tests that break one on purpose can compare against the reference model after
-the violation too:
+What the hardware does when a rule is broken is specified for every rule but
+the reset-first rule of [TOP-IF-13], so tests that break one on purpose can
+compare against the reference model after the violation too. Before the
+first reset nothing is defined; the first reset cycle makes the control
+state defined again:
 
 | Rule | Outcome when broken | Flagged in hardware |
 |---|---|---|
@@ -689,6 +712,7 @@ the violation too:
 | [TOP-ISA-7] | the second JUMP waits one `NOP 1` slot ([TOP-ISA-27]) | no |
 | [TOP-ISA-14] | the JUMP is illegal: a one-slot NOP ([TOP-ISA-26]) | yes, `err_illegal` |
 | [TOP-IF-6] | the configuration write is ignored ([TOP-IF-8]) | no |
+| [TOP-IF-13] (reset first) | undefined until the end of the first cycle with `rst_n` = 0; register-file and bank contents written before then can't be relied on | no |
 
 1. [TOP-HAZ-3]: at least **2 slots between** a write to a GRF/SRF entry and an
    instruction that reads it as a source. The MAC accumulator is exempt
@@ -706,6 +730,8 @@ the violation too:
 5. [TOP-ISA-14]: a JUMP's IMM0 is between 1 and the JUMP's own PC.
 6. [TOP-IF-6]: the host writes register files only while `busy` = 0 and
    `trig_valid` = 0.
+7. [TOP-IF-13]: the host holds `rst_n` = 0 for at least one cycle before
+   its first trigger or configuration write after power-up.
 
 ## Differences from ANEMOS
 
@@ -740,9 +766,11 @@ each next to its rule. The FP16 ones are in the
 | GRF_B read ports | [TOP-ARCH-10] | 3: the MAC accumulator has its own | 2: the accumulator's index is ORed into port 1's, so a GRF_B read through port 1 in the same cycle reads the ORed index |
 | When MOV and bank stores write | [TOP-PIPE-1] | in S5, like every other write: at most one write per cycle, in program order | a MOV from a register, and a bank store, write in the cycle they are decoded; bank loads and arithmetic through its write pipeline |
 | Bank read after a bank store to the same column | [TOP-HAZ-6] | at least 4 slots apart (v1 bank, write first on the same edge) | the store is driven on the bank bus in its own command's cycle; when a later read sees it depends on ANEMOS's DRAM side, outside its unit (not checked) |
+| State before the first reset | [TOP-IF-13] | undefined until the end of the first reset cycle; the host resets first | its clocked threads run their reset branch at time 0 (read, not run) |
 | `busy` output | [TOP-IF-7] | 1 from the cycle after a trigger until 4 cycles after the last one, longer inside a NOP or a loop | none |
 
-Same in both, so nothing to mask: the opcode and operand codes, the loop
+Same in both, so nothing to mask: the rising clock edge ([TOP-ARCH-11]),
+the opcode and operand codes, the loop
 state's transitions for a JUMP with IMM1 ≥ 1 ([TOP-ISA-3]), the PC wrap
 from 31 to 0 ([TOP-ISA-8]), GRF → SRF taking lane 0 ([TOP-ISA-29]), and a
 reserved opcode advancing the PC by one.
