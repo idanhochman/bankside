@@ -59,6 +59,21 @@ the final state. FP16 arithmetic is NumPy `float16`, one rounding per
 operation ([TOP-FP-3]), with every NaN result replaced by 0x7E00
 ([TOP-FP-6]); data movement copies bits ([TOP-FP-9]).
 
+- **Reset.** A cycle is a slot only if `trig_valid` = 1 and `rst_n` = 1
+  ([TOP-IF-1]): a trigger in a cycle with `rst_n` = 0 is dropped, not
+  deferred, and makes no entry, no bank read and no change to `err_illegal`.
+  The edge that ends a reset cycle applies [TOP-IF-4] after every other
+  update of that edge. An entry in S5 in the reset cycle still makes its
+  write, to a register file or the bank; the entries in S2 to S4 are removed
+  and never write ([TOP-IF-3], [TOP-IF-7]; `pcu_datapath`'s [DP-5] and
+  [case E](../../pcu_datapath/doc/README.md#case-e-reset-while-entries-are-in-flight)).
+- **Before the first reset.** The model starts at the edge that ends the
+  first cycle with `rst_n` = 0. It predicts nothing before that: the unit's
+  control state, `busy`, `err_illegal` and every S5 write enable have no
+  power-up value until then, so a register-file entry or a bank column may
+  be written with undefined data in those cycles, the first reset cycle
+  included ([CTRL-4], [DP-4]; the top rule is #46). A write in those cycles
+  sets no written flag.
 - **Written flags.** The model keeps a *written* flag per register-file entry
   (CRF, GRF_A, GRF_B, SRF_M, SRF_A), set by an S5 write or by a configuration
   write that takes effect ([TOP-IF-10]) and never cleared, not by reset either
@@ -198,6 +213,10 @@ bankside's own distance, since ANEMOS's is unknown.
     (quiet and signalling, either sign, several payloads, in either operand
     and in both) and both invalid operations (0 × ±Inf, Inf − Inf) are among
     the directed cases.
+
+  These are the top-level requirements on the units. Each unit's own doc
+  (`fp16_mul`: [FMUL-1] to [FMUL-11]) is mapped to tests in its unit
+  testplan (`src/<module>/dv/README.md`, M2), which carries out VER-4.
 
 ## Functional coverage
 
@@ -366,7 +385,8 @@ Code coverage (line, branch, toggle) is collected through opendv as well.
 ## Interface and status
 
 - **[VER-13] Status outputs.**
-  - `busy` is checked in every cycle against [TOP-IF-7], predicted by the
+  - `busy` is checked in every cycle after the first reset cycle (see
+    [Stimulus](#stimulus)) against [TOP-IF-7], predicted by the
     model from the trigger sequence, the resets, the NOP slots left and the
     loop state alone. Its exact edges: from idle, the first trigger in cycle
     *f* leaves `busy` = 0 in cycle *f* and makes it 1 from *f* + 1; after
@@ -384,12 +404,32 @@ Code coverage (line, branch, toggle) is collected through opendv as well.
   - `err_illegal` ([TOP-ISA-24]): 0 during the S1 cycle of the illegal
     instruction and 1 from the next cycle on; sticky through later legal
     instructions, EXIT and new runs; 0 from the cycle after a cycle with
-    `rst_n` = 0 ([TOP-IF-4]). A held-over JUMP's `NOP 1` slot ([TOP-ISA-27])
-    leaves it at 0.
+    `rst_n` = 0 ([TOP-IF-4]), also when an illegal word is at the PC with a
+    trigger in that reset cycle (VER-14). A held-over JUMP's `NOP 1` slot
+    ([TOP-ISA-27]) leaves it at 0. Checked in every cycle after the first
+    reset cycle, like `busy`.
 - **[VER-14] Reset, configuration, debug and the bank port.**
   - Reset clears the control state ([TOP-IF-4]), also from inside a loop and
     inside a multi-cycle NOP, with entries in flight, and keeps the
     register-file contents ([TOP-ARCH-5]), read back through the debug port.
+    With entries in flight, the entry in S5 in the reset cycle makes its
+    write (to a register file, and in a variant to the bank) and the entries
+    in S2 to S4 make none: `pcu_datapath`'s
+    [case E](../../pcu_datapath/doc/README.md#case-e-reset-while-entries-are-in-flight),
+    run at top as a directed test.
+  - Triggers in reset cycles ([TOP-IF-1], [TOP-IF-2], [TOP-IF-4]): a
+    trigger in a cycle with `rst_n` = 0 is not a slot. Checked in that
+    cycle: `bank_rd_en` = 0, also when the word at the PC has a bank source.
+    Checked after the edge: `err_illegal` = 0, also when the word at the PC
+    is illegal and `err_illegal` was 0 or 1 before; no entry was made
+    (`busy` = 0 in the next cycle, no S5 write 4 cycles later); and the next
+    slot fetches CRF[0], so the trigger is lost, not deferred. Directed:
+    `pcu_ctrl`'s
+    [case D](../../pcu_ctrl/doc/README.md#case-d-triggers-in-reset-cycles),
+    run at top, with triggers in two reset cycles in a row, and with a
+    reset trigger inside a multi-cycle NOP and inside a loop body. Random
+    runs mix resets and triggers ([Stimulus](#stimulus)), and the bank
+    checks below stay on in reset cycles.
   - Configuration writes ([TOP-IF-5], [TOP-IF-9], [TOP-IF-10]): every select
     (0 to 7) with every index (0 to 31), while idle. A write to a valid entry
     takes `cfg_wr_data[W−1:0]`, and the bits above *W* are ignored (written
@@ -423,13 +463,21 @@ Code coverage (line, branch, toggle) is collected through opendv as well.
     with `bank_wr_en` = 1; it accepts a read and a write in the same cycle,
     to the same bank or not; and when both name the same column on the same
     edge it applies the write first, so the read returns the written data.
-    It ignores `bank_rd_*` and `bank_wr_*` while their enable is 0.
-  - The bank checks: `bank_rd_en` = 1 exactly in the S1 cycle of an
-    instruction with a bank source, with `bank_rd_sel` the bank named and the
-    address that cycle's trigger's ([TOP-ARCH-6]); `bank_wr_en` = 1 exactly
-    in the S5 cycle of a bank store, to the bank its dst names and the
-    address of its own trigger ([TOP-ARCH-8]), tested with different columns
-    on the later triggers and with no trigger in the store's S5 cycle.
+    It ignores `bank_rd_*` and `bank_wr_*` while their enable is 0. It also
+    ignores `bank_wr_*` in every cycle up to and including the first cycle
+    with `rst_n` = 0, since `bank_wr_en` has no power-up value until that
+    reset has ended ([DP-4]; #46): the bank's contents are those the test
+    loaded, whatever the unit drives before then.
+  - The bank checks, in every cycle, reset cycles included:
+    `bank_rd_en` = 1 exactly in the S1 cycle of an instruction with a bank
+    source, which is never a cycle with `rst_n` = 0 ([TOP-IF-1],
+    [TOP-IF-2]), with `bank_rd_sel` the bank named and the address that
+    cycle's trigger's ([TOP-ARCH-6]); `bank_wr_en` = 1 exactly in the S5
+    cycle of a bank store, a reset cycle included, to the bank its dst names
+    and the address of its own trigger ([TOP-ARCH-8]), tested with different
+    columns on the later triggers and with no trigger in the store's S5
+    cycle. The `bank_wr_en` check starts in the cycle after the first reset
+    cycle; the `bank_rd_en` check holds from the first cycle.
 
 ## Simulation runs and power-up values
 
@@ -447,10 +495,15 @@ Code coverage (line, branch, toggle) is collected through opendv as well.
     reproduces both.
 
   A directed power-up test reads every entry of every file through the debug
-  port before any write, and checks that the values are not all 0, that they
-  differ between two seeds, that each read of an entry returns the same bits
-  on every port (a program read too) until the entry is first written, and
-  that a reset doesn't change them. A test that reads an unwritten entry on
+  port after the first reset and before any write, and checks that the
+  values are not all 0, that they differ between two seeds, that each read
+  of an entry returns the same bits on every port (a program read too) until
+  the entry is first written, and that a later reset doesn't change them.
+  The reads start after the first reset, not in cycle 0: until the end of
+  the first cycle with `rst_n` = 0 the S5 write enables have no power-up
+  value, so an entry may be written then ([DP-4]), and the first reset is
+  not one that [TOP-ARCH-9]'s "reset doesn't change them" can be checked
+  on (noted on #46). A test that reads an unwritten entry on
   purpose checks only that stability; the model reports the read
   ([reference model](#reference-model)), and the VER-1 comparison stops
   there.
@@ -474,12 +527,14 @@ Code coverage (line, branch, toggle) is collected through opendv as well.
   ([TOP-HIER-10]), with the ports and widths of
   [interfaces.md](../doc/interfaces.md). A structural test reaches each
   instance of [TOP-HIER-1] by its spec name through the cocotb handle
-  (`ctrl`, `ctrl.dec`, `dp`, `crf`, `grf_a`, `grf_b`, `srf_m`, `srf_a`) and
-  fails if one is missing. The lane instances inside `dp` are named by
-  `pcu_datapath`'s doc, not yet written, and are left out until it is. The
-  rest of the hierarchy rules are structure, not behaviour, and are checked
-  in each module's own testplan (`src/<module>/dv/`) once the module exists
-  (#12); the [coverage table](#requirement-coverage) says which.
+  (`ctrl`, `ctrl.dec`, `dp`, `crf`, `grf_a`, `grf_b`, `srf_m`, `srf_a`), and
+  the 32 lane instances inside `dp`, `dp.g_lane[l].u_mul` and
+  `dp.g_lane[l].u_add` for *l* = 0 to 15 (`pcu_datapath`'s [DP-16]; also
+  `fp16_mul`'s [FMUL-2]), and fails if one is missing. The rest of the
+  hierarchy rules are structure, not behaviour, and are checked against the
+  module docs' own IDs in each module's unit testplan (`src/<module>/dv/`,
+  M2 for the FP16 units and M4 for the core); the
+  [coverage table](#requirement-coverage) says which.
 
 ## Stimulus
 
@@ -492,9 +547,18 @@ Code coverage (line, branch, toggle) is collected through opendv as well.
   ([TOP-IF-6]), except in the VER-10 and VER-14 tests that break the rule on
   purpose. Every register-file entry a program reads, and every CRF entry it
   executes, is written first ([TOP-ARCH-5]), except in the VER-15 tests.
-- `trig_valid` is held at 0 in cycles with `rst_n` = 0, and the bank-port
-  checks are off in those cycles, until #41 settles what the unit does with a
-  trigger during reset.
+- Every run starts with `rst_n` = 0 in its first cycle, with or without a
+  trigger in it. The unit has no defined state until the edge that ends
+  that cycle ([CTRL-4], [DP-4]; the top rule is #46), so the host makes no
+  configuration write up to and including that cycle, the checks of `busy`,
+  `err_illegal` and `bank_wr_en` start in the cycle after it, and the bank
+  model ignores `bank_wr_*` until then (VER-14).
+- Random runs mix resets and triggers: `rst_n` = 0 in random cycles, with
+  or without a trigger (at a random address) in the same cycle, mid-run with
+  entries in flight, inside multi-cycle NOPs and inside loop bodies. A
+  trigger in a reset cycle is ignored ([TOP-IF-1]); the model predicts that
+  (see [Reference model](#reference-model)), and every check stays on in
+  reset cycles.
 
 ## Requirement coverage
 
@@ -513,7 +577,7 @@ the model implements; it is listed only where it is the main check.
 | [TOP-ARCH-7] | at most one bank operand | VER-5, VER-8 |
 | [TOP-ARCH-8] | bank writes in S5, to the store's own trigger | VER-14 |
 | [TOP-ARCH-9] | power-up value of an entry never written | VER-15 (blocked by the opendv gap); the model's written flags ([reference model](#reference-model)) |
-| [TOP-ARCH-10] | read ports: GRF_B 3, the others 1 or 2 | VER-6 (three GRF_B reads in one cycle) |
+| [TOP-ARCH-10] | read ports: GRF_B 3, the others 1 or 2 | VER-6 (three GRF_B reads in one cycle), VER-7 (the CRF's 2: a zero-slot JUMP reads the JUMP and the word it leads to in one cycle) |
 | [TOP-PIPE-1] | five stages, every write in S5, in program order | VER-1, VER-6 |
 | [TOP-PIPE-2] | bubbles without triggers | VER-6, random bubbles in [Stimulus](#stimulus) |
 | [TOP-PIPE-3] | NOP and JUMP slots | VER-7 |
@@ -564,10 +628,10 @@ the model implements; it is listed only where it is the main check.
 | [TOP-ISA-28] | one loop state for every JUMP | VER-10 |
 | [TOP-ISA-29] | lane numbering; GRF → SRF takes lane 0 | VER-11 |
 | [TOP-ISA-30] | R applies on every MOV pair | VER-11, VER-2 (masked) |
-| [TOP-IF-1] | one slot per `trig_valid` | VER-7, VER-13 |
-| [TOP-IF-2] | bank read timing | VER-14 |
+| [TOP-IF-1] | one slot per `trig_valid` and `rst_n` = 1; a trigger in a reset cycle is ignored | VER-7, VER-13, VER-14 (triggers in reset cycles), random resets in [Stimulus](#stimulus) |
+| [TOP-IF-2] | bank read timing; `bank_rd_en` = 0 in a reset cycle | VER-14 (bank checks on in reset cycles) |
 | [TOP-IF-3] | bank write timing; write first on the same edge | VER-14, VER-6 (bank distance 4) |
-| [TOP-IF-4] | reset | VER-14, VER-13 |
+| [TOP-IF-4] | reset; it wins over every other update at its edge | VER-14 (entries in flight, triggers in reset cycles), VER-13 |
 | [TOP-IF-5] | configuration write timing | VER-14 |
 | [TOP-IF-6] | host writes only while idle | VER-10 |
 | [TOP-IF-7] | `busy` | VER-13 |
@@ -576,20 +640,25 @@ the model implements; it is listed only where it is the main check.
 | [TOP-IF-10] | which configuration writes take effect | VER-14 |
 | [TOP-IF-11] | what a debug read returns | VER-14 |
 | [TOP-IF-12] | a debug read in the cycle of a write | VER-14 |
-| [TOP-HIER-1] | the v1 modules, instance names and prefixes | VER-16 (instance names); the prefixes are uncovered by simulation: they are names in the docs |
-| [TOP-HIER-2] | stage ownership: S1 in `pcu_ctrl`, S2 to S5 in `pcu_datapath` | uncovered at top: no program sees which module holds a stage register; checked by the `pcu_ctrl` and `pcu_datapath` testplans (#30, #32) |
-| [TOP-HIER-3] | `fp16_mul` and `fp16_add`: one lane, combinational | VER-4 |
-| [TOP-HIER-4] | `pcu_regfile`: combinational, write-through, one write port, no reset | VER-6, VER-14, VER-15 at top; every port of the module in the `pcu_regfile` testplan (#35) |
+| [TOP-HIER-1] | the v1 modules, instance names and prefixes | VER-16 (instance names, the lane instances of [DP-16] included); the prefixes are uncovered by simulation: they are names in the docs |
+| [TOP-HIER-2] | stage ownership: S1 in `pcu_ctrl`, S2 to S5 in `pcu_datapath` | uncovered at top: no program sees which module holds a stage register; checked against [CTRL-4] and [CTRL-12] in the `pcu_ctrl` unit testplan and [DP-4] and [DP-5] in the `pcu_datapath` one (M4) |
+| [TOP-HIER-3] | `fp16_mul` and `fp16_add`: one lane, combinational | VER-4; for `fp16_mul`, [FMUL-3] and [FMUL-11] in its unit testplan (M2) |
+| [TOP-HIER-4] | `pcu_regfile`: combinational, write-through, one write port, no reset | VER-6, VER-14, VER-15 at top; every port of the module, [RF-1] to [RF-13], in the `pcu_regfile` unit testplan (M4) |
 | [TOP-HIER-5] | the accumulator bypass is `grf_b`'s write-through | VER-6 checks the behaviour ([TOP-HAZ-2]); the way it is built is uncovered at top, since no program tells it apart ([hierarchy](../doc/hierarchy.md#choices-weighed)) |
 | [TOP-HIER-6] | write-port select | VER-14 |
 | [TOP-HIER-7] | debug read select; tied off for synthesis | VER-14; the tie-off is uncovered by simulation: it is a syn result |
-| [TOP-HIER-8] | `busy` is the OR of `ctrl`'s and `dp`'s | VER-13 at top; each term in the `pcu_ctrl` and `pcu_datapath` testplans (#30, #32) |
+| [TOP-HIER-8] | `busy` is the OR of `ctrl`'s and `dp`'s | VER-13 at top; each term, [CTRL-13] and [DP-15], in the `pcu_ctrl` and `pcu_datapath` unit testplans (M4) |
 | [TOP-HIER-9] | one shared SystemVerilog package | uncovered: a rule on where types live, with no behaviour to simulate; checked in design review |
 | [TOP-HIER-10] | no wrapper: `top` is the unit | VER-16 |
 
-Open spec work that may change the checks above: #27 (the zero-slot JUMP fetch
-and the CRF's read ports, settled with `pcu_ctrl` in #30) may change
-[TOP-ISA-27] and with it the VER-10 and VER-8 cases built on it; #41 (a
-trigger during reset) may add a VER-14 case and lift the reset rule in
-[Stimulus](#stimulus). The child modules' docs (#30 to #35) add their own IDs,
-which go in their own testplans.
+Settled since the last revision: #27 (the zero-slot JUMP fetch and the CRF's
+read ports, settled by `pcu_ctrl`'s doc) left [TOP-ISA-27] as it was, so the
+VER-8 and VER-10 cases built on it stand; #41 (a trigger during reset) is
+settled by [TOP-IF-1], [TOP-IF-2] and [TOP-IF-4], which lifted the reset rule
+in [Stimulus](#stimulus) and added the VER-14 case. Open spec work that may
+change the checks above: #46 (the unit's state and outputs before the first
+reset), which the [reference model](#reference-model), VER-14, VER-15 and
+[Stimulus](#stimulus) follow from [CTRL-4] and [DP-4] until the top spec
+states it. The module docs' own IDs (CTRL-, DEC-, DP-, RF-, FMUL-) go in the
+modules' unit testplans; this table cites them only where a top rule is
+checked there.
