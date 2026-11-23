@@ -1,0 +1,36 @@
+== 1. Worked cases in README.md
+ok   the worked-case table has 43 rows
+ok   every row's p equals spec_mul and model_mul
+ok   the exact-product column is right on all 29 finite non-zero rows
+== 2. Structured classes, model_mul against spec_mul
+ok   C1 specials x all 65536, both orders: 1703936 pairs; results: Inf 253952, NaN 1196032, zero 253952; exact ties 0
+ok   C2 all exponent-field pairs x 12 x 12 significands, 2 sign cases: 276768 pairs; results: Inf 37088, normal 201316, subnormal 32454, zero 5910; exact ties 14968
+ok   C3 all subnormals x every exponent field x 3 significands: 190278 pairs; results: normal 89060, subnormal 67460, zero 33758; exact ties 2284
+ok   C4 every positive finite a x the b nearest 3 thresholds: 301048 pairs; results: Inf 33118, normal 151743, subnormal 88539, zero 27648; exact ties 6404
+ok   C6 random: 200000 uniform, 100000 finite non-zero: 300000 pairs; results: Inf 32169, NaN 12355, normal 197315, subnormal 46207, zero 11954; exact ties 1024
+ok   C5 every tie among the 2^20 pairs in [1, 2) x [1, 2): 3367 ties, 1692 round up (odd below), 1675 round down (even below), all to even
+== 3. NumPy 2.5.1 float16
+ok   the worked cases equal NumPy (a NaN as a class) and the NumPy column
+ok   C1: model_mul = NumPy on all 1703936 pairs (NaN as a class)
+ok   C2: model_mul = NumPy on all 276768 pairs (NaN as a class)
+ok   C3: model_mul = NumPy on all 190278 pairs (NaN as a class)
+ok   C4: model_mul = NumPy on all 301048 pairs (NaN as a class)
+ok   C6: model_mul = NumPy on all 300000 pairs (NaN as a class)
+== 4. All 2^32 pairs: vectorised model_mul against NumPy float16
+ok   4294967296 pairs
+ok   vectorised model_mul = NumPy on every pair (NaN as a class): 0 differ
+ok   every NaN result of the model is 0x7E00
+ok   p(a, b) = p(b, a) bit for bit on every pair: 0 differ
+       digest of the model's results: 3695277560005510116
+       result classes: zero 58620500, subnormal 479104404, normal 2948541464, Inf 544713724, NaN 263987204
+ok   NaN results = pairs with a NaN operand + the 8 Inf x 0 pairs = 263987204
+== 5. ANEMOS half 2.2.0, from anemos_fmul.out
+ok   ANEMOS ran all 2^32 pairs: 4294967296
+ok   ANEMOS = the reference on every non-NaN result: 0 differ
+ok   ANEMOS gives a NaN exactly where the spec does: 263987204 = 263987204
+ok   ANEMOS's 2^32 results, NaN as 0x7E00, have the digest of bankside's model: 3695277560005510116
+ok   so do the _Float16 reference's: 3695277560005510116
+ok   ANEMOS's NaN for Inf x 0 (8 pairs) is 0x7FFF: {32767: 8}
+ok   ANEMOS's NaN for a NaN operand is not one pattern: 1024 distinct patterns (propagated)
+ok   every worked case matches ANEMOS's run and the ANEMOS column
+PASS
