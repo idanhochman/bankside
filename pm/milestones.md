@@ -65,8 +65,8 @@ interface. Each unit has its unit testplan and tests.
 
 ## M4: PCU core
 
-**Goal:** all nine instructions working in the RTL. Each module of the core
-has its unit testplan and tests.
+**Goal:** all nine instructions working in the RTL. Each module of the core,
+and the shared package `bankside_pkg`, has its unit testplan and tests.
 
 **Done when:**
 - the core is brought up in this order, each step with directed tests per
@@ -75,6 +75,8 @@ has its unit testplan and tests.
 - each step has its review pages;
 - each core module (`pcu_ctrl`, `pcu_decode`, `pcu_datapath`, `pcu_regfile`)
   has a unit testplan (`src/<module>/dv/README.md`) and tests;
+- the shared package `bankside_pkg` (`src/common/rtl/`) exists and `common` has
+  a unit testplan (`src/common/dv/README.md`) and a test;
 - spec gaps found on the way are settled in the spec.
 
 ## M5: v1 verification closure
