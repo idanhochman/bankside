@@ -1,0 +1,58 @@
+== 1. Worked cases in README.md
+ok   the worked-case table has 49 rows
+ok   every row's s equals spec_add and model_add
+ok   the exact-sum column is right on all 36 finite rows
+ok   every row gives the same s with the operands swapped
+== 2. Structured classes, model_add against spec_add
+ok   C1 specials x all 65536, both orders: 1703936 pairs; results: Inf 253964, NaN 1196020, normal 245760, subnormal 8184, zero 8
+ok   C1: 0 pairs with an inexact float32 sum; rounding it again to binary16 gives spec_add on every one
+ok   C2 all exponent-field pairs x 12 x 12 significands, 2 sign cases: 276768 pairs; results: Inf 1024, normal 274444, subnormal 927, zero 373
+ok   C2: 66856 pairs with an inexact float32 sum; rounding it again to binary16 gives spec_add on every one
+ok   C3 all subnormals x every exponent field x 3 significands: 190278 pairs; results: normal 183799, subnormal 6477, zero 2
+ok   C3: 91107 pairs with an inexact float32 sum; rounding it again to binary16 gives spec_add on every one
+ok   C4 every positive finite a x the b nearest 65520 - a and nearest -a: 206328 pairs; results: Inf 25086, normal 106490, subnormal 43008, zero 31744
+ok   C4: 0 pairs with an inexact float32 sum; rounding it again to binary16 gives spec_add on every one
+ok   C6 random: 200000 uniform, 100000 finite non-zero: 300000 pairs; results: Inf 517, NaN 12300, normal 284852, subnormal 2326, zero 5
+ok   C6: 91596 pairs with an inexact float32 sum; rounding it again to binary16 gives spec_add on every one
+ok   C7 inexact float32 sums: a in 2^-1..2^15 x b 13 to 15 binades below: 417792 pairs; results: normal 417792
+ok   C7: 149248 pairs with an inexact float32 sum; rounding it again to binary16 gives spec_add on every one
+ok   C7 has inexact float32 sums, so it tests the argument
+ok   C5 every tie of a in [1, 2) + b in [2^-11, 1), same sign: 786432 ties, 393216 round up (odd below), 393216 round down (even below), all to even
+== 3. Double rounding: the doc's table
+ok   the double-rounding table has 6 rows
+ok   every row: s, the float32 sum column, the 12-bit column
+== 4. NumPy 2.5.1 float16
+ok   the worked cases equal NumPy (a NaN as a class) and the NumPy column
+ok   C1: model_add = NumPy on all 1703936 pairs (NaN as a class)
+ok   C2: model_add = NumPy on all 276768 pairs (NaN as a class)
+ok   C3: model_add = NumPy on all 190278 pairs (NaN as a class)
+ok   C4: model_add = NumPy on all 206328 pairs (NaN as a class)
+ok   C6: model_add = NumPy on all 300000 pairs (NaN as a class)
+ok   C7: model_add = NumPy on all 417792 pairs (NaN as a class)
+== 5. All 2^32 pairs: vectorised model_add against NumPy float16
+ok   4294967296 pairs
+ok   vectorised model_add = NumPy + on every pair (NaN as a class): 0 differ
+ok   vectorised model_add = float32 path on every pair (NaN as a class): 0 differ
+ok   vectorised model_add = float64 once on every pair (NaN as a class): 0 differ
+ok   1140785152 pairs have an inexact float32 sum (the double rounding of NumPy's path happens), and the float32 path still equals the model on all
+ok   every NaN result of the model is 0x7E00
+ok   s(a, b) = s(b, a) bit for bit on every pair: 0 differ
+ok   -0 is the result of exactly one pair, -0 + -0: 1
+       +0 results: 63489
+       digest of the model's results: 3158381579869063936
+       result classes: zero 63490, subnormal 12185254, normal 4010090840, Inf 8640514, NaN 263987198
+ok   NaN results = pairs with a NaN operand + the 2 Inf - Inf pairs = 263987198
+== 6. ANEMOS half 2.2.0, from anemos_fadd.out
+ok   ANEMOS ran all 2^32 pairs: 4294967296
+ok   ANEMOS = the one-rounding reference on every non-NaN result, signs of zero included: 0 differ
+ok   ANEMOS gives a NaN exactly where the spec does: 263987198 = 263987198
+ok   the reference gives -0 on exactly one pair: 1
+ok   GCC float path: 1140785152 inexact float sums, 0 results differ from one rounding
+ok   the same count of inexact float32 sums as NumPy's: 1140785152
+ok   digest_anemos: the 2^32 results, NaN as 0x7E00, have the digest of bankside's model: 3158381579869063936
+ok   digest_ref: the 2^32 results, NaN as 0x7E00, have the digest of bankside's model: 3158381579869063936
+ok   digest_ref32: the 2^32 results, NaN as 0x7E00, have the digest of bankside's model: 3158381579869063936
+ok   ANEMOS's NaN for Inf - Inf (2 pairs) is 0x7FFF: {32767: 2}
+ok   ANEMOS's NaN for a NaN operand is not one pattern: 1024 distinct patterns (propagated)
+ok   every worked case matches ANEMOS's run and the ANEMOS column
+PASS
