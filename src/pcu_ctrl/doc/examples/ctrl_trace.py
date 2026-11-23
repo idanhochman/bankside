@@ -9,11 +9,12 @@ the crf instance (32 x 32, combinational write-through reads, [RF-9]), the
 configuration write gate of [TOP-IF-8] for the CRF, and pcu_datapath's S3
 to S5 valid bits ([TOP-HIER-8]), so that top's busy can be compared.
 
-pcu_decode doesn't have its doc yet (#31). Its role here is played by the
-top spec's own assembler and legality check (src/top/doc/examples/
-check_isa.py, which reads bankside_isa.yaml): `illegal` is [TOP-ISA-2]
-without the JUMP range check, and the bank read is the bank source of a
-legal word.
+The child dec is pcu_decode's own model: model() of
+src/pcu_decode/doc/examples/dec_check.py ([DEC-3] to [DEC-14]), whose
+illegal, bank_rd and bank_sel outputs decide the slot kind and the bank
+read, and whose dec_instr is what an OP slot issues. Loading it runs
+dec_check.py's own checks first (about a minute). The words are assembled
+and printed by the top spec's check_isa.py, which reads bankside_isa.yaml.
 
 What it prints and checks:
   1. Cases A to F of the doc, each a table that must appear in the doc word
@@ -47,16 +48,17 @@ HERE = Path(__file__).resolve().parent
 DOC = HERE.parent / "README.md"
 WAVE = HERE.parent / "img" / "ctrl_jump_fetch.wave.json"
 TOPX = HERE.parents[2] / "top" / "doc" / "examples"
+DECX = HERE.parents[2] / "pcu_decode" / "doc" / "examples"
 SPEC = DOC.read_text()
 failures = []
 
 
-def load(name):
-    """Run one of the top spec's example scripts quietly; return its globals."""
+def load(name, where=TOPX):
+    """Run one of the spec's example scripts quietly; return its globals."""
     out = io.StringIO()
     try:
         with contextlib.redirect_stdout(out):
-            return runpy.run_path(str(TOPX / name))
+            return runpy.run_path(str(where / name))
     except SystemExit as e:
         print(out.getvalue())
         sys.exit(f"FAIL {name} exited with {e.code}")
@@ -67,6 +69,7 @@ assemble, legal, get, decode = isa["assemble"], isa["legal"], isa["get"], isa["d
 INS, CODE2OP, BANKS = isa["INS"], isa["CODE2OP"], isa["BANKS"]
 OPC = {v["opcode"]: k for k, v in INS.items()}
 NOP_OP, JUMP_OP, EXIT_OP = (INS[k]["opcode"] for k in ("NOP", "JUMP", "EXIT"))
+dec_model = load("dec_check.py", DECX)["model"]   # pcu_decode [DEC-2]: (illegal, bank_rd, bank_sel, dec_instr)
 ILL_WORD = 0x30000000                  # opcode 3: reserved [TOP-ISA-2]
 CRF_N = 32
 
@@ -84,19 +87,18 @@ def imm1(w):
 
 
 def dec(w):
-    """Stand-in for pcu_decode: (illegal, bank read or None, text)."""
-    op = opcode(w)
-    if op not in OPC:
-        return True, None, "reserved opcode"
-    mn = OPC[op]
-    fmt = INS[mn]["format"]
-    if fmt == "control":
-        return False, None, decode(w)          # a JUMP is legal as a word
-    if not legal(w):
-        return True, None, decode(w)
-    srcs = ["src0"] + (["src1"] if fmt == "alu" else [])
-    bank = next((CODE2OP[get(w, fmt, f)] for f in srcs if CODE2OP.get(get(w, fmt, f)) in BANKS), None)
+    """The child dec, pcu_decode's model: (illegal, bank read or None, text).
+    The text is check_isa.py's disassembly, for the tables only."""
+    illegal, bank_rd, bank_sel, d = dec_model(w)
+    bank = ("ODD_BANK" if bank_sel else "EVEN_BANK") if bank_rd else None
+    if illegal:
+        return True, None, "reserved opcode" if opcode(w) not in OPC else decode(w)
     return False, bank, decode(w)
+
+
+def dec_instr(w):
+    """dec_instr of the child dec ([CTRL-12]: what an OP slot issues)."""
+    return dec_model(w)[3]
 
 
 def wname(w):
@@ -194,6 +196,8 @@ class Ctrl:
                 n["pc"] = (p + 1) % CRF_N
         n["iss_valid"] = int(kind is not None)            # [CTRL-12]
         n["iss_instr"] = (dec(w)[2] if kind == "OP" else "decoded NOP") if kind else None
+        if kind == "OP" and dec_instr(w)["op"] == 0:      # [DEC-14]: OP never issues DEC_NOP
+            failures.append(f"OP slot with DEC_NOP: {w:#010x}")
         n["iss_row"], n["iss_col"] = (row, col) if kind else (None, None)
         if not rst_n:                                     # [CTRL-4], [CTRL-5]: reset wins
             n = dict(pc=0, loop=(0, 0), nop=0, err=0, iss_valid=0, iss_instr=None,

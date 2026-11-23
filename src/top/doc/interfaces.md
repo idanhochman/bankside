@@ -16,8 +16,8 @@ register files. **[bankside]** throughout, unless marked.
 
 | Port | Dir | Width | Description |
 |---|---|---|---|
-| `clk` | in | 1 | Unit clock (DRAM core clock) |
-| `rst_n` | in | 1 | Synchronous reset, active low |
+| `clk` | in | 1 | Unit clock (DRAM core clock); every register is clocked on its rising edge ([TOP-ARCH-11]) |
+| `rst_n` | in | 1 | Synchronous reset, active low ([TOP-IF-4]); the host holds it at 0 for at least one cycle before its first trigger or configuration write ([TOP-IF-13]) |
 | **Trigger** | | | |
 | `trig_valid` | in | 1 | One issue slot this cycle |
 | `trig_row` | in | ROW_W | Row of the triggering command |
@@ -41,8 +41,8 @@ register files. **[bankside]** throughout, unless marked.
 | `dbg_rd_sel`, `dbg_rd_idx` | in | 3, 5 | Register file and entry, coded as `cfg_wr_sel` and `cfg_wr_idx` ([TOP-IF-9]) |
 | `dbg_rd_data` | out | 256 | Combinational, write-through read of the selected entry, zero-extended; 0 for an unused select or index ([TOP-IF-11], [TOP-IF-12]) |
 | **Status** | | | |
-| `busy` | out | 1 | The unit is not idle ([TOP-IF-7]) |
-| `err_illegal` | out | 1 | Sticky: an illegal instruction was executed ([TOP-ISA-2]); set at the end of its S1 cycle ([TOP-ISA-24]); cleared by reset |
+| `busy` | out | 1 | The unit is not idle ([TOP-IF-7]); undefined until the end of the first reset cycle ([TOP-IF-13]) |
+| `err_illegal` | out | 1 | Sticky: an illegal instruction was executed ([TOP-ISA-2]); set at the end of its S1 cycle ([TOP-ISA-24]); cleared by reset; undefined until the end of the first reset cycle ([TOP-IF-13]) |
 
 ## Timing
 
@@ -83,7 +83,61 @@ register files. **[bankside]** throughout, unless marked.
   all pipeline stages invalid, `err_illegal` ← 0. Register files keep their
   contents ([TOP-ARCH-5]). These values win over every other update at the
   same edge: an illegal word at the PC in a reset cycle doesn't set
-  `err_illegal`. **[bankside]** (#41)
+  `err_illegal`. "On `rst_n` = 0" means at the rising edge that ends a
+  cycle with `rst_n` = 0 ([TOP-ARCH-11]). What the unit holds before the
+  first reset is [TOP-IF-13]. **[bankside]** (#41)
+- **[TOP-IF-13]** **Before the first reset.** From power-up until the
+  rising edge that ends the first cycle with `rst_n` = 0, every register of
+  the unit other than the register-file entries holds an undefined value,
+  and so do the outputs it drives. **[bankside]** Precisely:
+  1. `busy`, `err_illegal` and the `bank_wr_*` outputs are undefined (0 or
+     1, or any value) in every cycle up to and including the first cycle
+     with `rst_n` = 0. From the next cycle on they follow [TOP-IF-4] and the
+     other rules.
+  2. The S5 write enables (`pcu_datapath`'s `grf_*_wr_en`, `srf_*_wr_en`
+     and `bank_wr_en`) have no power-up value, and the S5 outputs aren't
+     gated by `rst_n`. So in those cycles, the first reset cycle included, a
+     register-file entry or a bank column may be written, with undefined
+     data at an undefined index or address. No value written to a register
+     file or the bank before the end of the first reset cycle may be relied
+     on. The register files' power-up values are therefore the values at
+     the end of that cycle ([TOP-ARCH-9]). For the v1 bank, the testbench
+     ignores `bank_wr_en` until the first reset has ended, or loads the bank
+     only after it.
+  3. `dbg_rd_data` may show such a write through write-through
+     ([TOP-IF-12]), so it too is undefined in those cycles.
+  4. `bank_rd_en` is 0 in every cycle with `trig_valid` = 0 or `rst_n` = 0
+     ([TOP-IF-2]), before the first reset too.
+  5. **Host rule:** the host holds `rst_n` = 0 for at least one cycle before
+     its first trigger and before its first configuration write. A trigger
+     or a configuration write before the end of the first reset cycle has
+     no defined effect: the PC, the loop state and `busy` (which gates the
+     configuration write, [TOP-IF-8]) are undefined.
+
+  The rule is option (a) of #46. The other option weighed: (b) give the
+  control registers their reset values at power-up, with an `initial`
+  value. Silicon can't promise that, simulation would then differ from it,
+  and [TOP-ARCH-9] already declines it for the register files. `pcu_ctrl`
+  ([CTRL-4]) and `pcu_datapath` ([DP-4]) carry this rule out for their
+  registers and cite it. The papers don't describe a reset. ANEMOS's
+  clocked threads run their reset branch when the simulation starts
+  (SystemC runs every thread once at time 0, `async_reset_signal_is(rst,
+  false)` in `src/pc_unit.h` and `src/instr_decoder.h` at `f2d4018`; read,
+  not run), so its model has no undefined state to compare with.
+
+  ![Before and through the first reset: busy, err_illegal and the S5 write enables are undefined up to and including the first cycle with rst_n = 0](img/first_reset.svg)
+
+  *Figure 1: [TOP-IF-13]. Power-up in cycle 1, `rst_n` = 1 in cycles 1 and
+  2 with no trigger, the first reset cycle in cycle 3 (marker a), a trigger
+  in cycle 5. Up to and including cycle 3 the control outputs and the S5
+  write enables are undefined (x), so a write may happen in those cycles.
+  From cycle 4 they take their reset values (marker b); cycle 4 is the
+  first in which a configuration write takes effect (`busy` = 0 and
+  `trig_valid` = 0, [TOP-IF-8]), and `busy` rises the cycle after the
+  trigger ([TOP-IF-7]). `bank_rd_en` is 0 in every cycle without a slot.
+  [figures_check.py](examples/figures_check.py) checks the cells against
+  the rule. Source: [first_reset.wave.json](img/first_reset.wave.json).*
+
 - **[TOP-IF-5]** **Configuration writes** take effect at the end of the cycle.
   `dbg_rd_data` shows the written value already in the cycle of the write,
   through write-through ([TOP-IF-12]), and from the stored entry from the
@@ -97,7 +151,9 @@ register files. **[bankside]** throughout, unless marked.
   that cycle, if any, goes ahead as usual. The `busy` used is the output's
   value in that same cycle ([TOP-IF-7]). The
   [TOP-IF-6] assertion still fires, and nothing is flagged on the ports.
-  **[bankside]** Options weighed:
+  In `top` this is a gate on `cfg_wr_en` in front of the write-port select:
+  a configuration write is passed on only when `cfg_wr_en` = 1, `busy` = 0
+  and `trig_valid` = 0 ([TOP-HIER-6]). **[bankside]** Options weighed:
   - the S5 write wins only when both write the same file, and the
     configuration write goes ahead otherwise (closest to ANEMOS, below).
     But then a write that lands mid-run depends on what is in the pipeline
@@ -140,8 +196,10 @@ register files. **[bankside]** throughout, unless marked.
   *t*. No input enters it combinationally: neither `trig_valid` nor
   anything else. An entry in S1 doesn't count, since it exists only in a
   cycle with `trig_valid` = 1. The designer may build `busy` as an OR of
-  those registers or as a register of its own with the same value.
-  **[bankside]**
+  those registers or as a register of its own with the same value. In
+  `top`, `busy` is the OR of the `busy` outputs of `pcu_ctrl` (term 1 for
+  S2, terms 2 and 3) and `pcu_datapath` (term 1 for S3 to S5)
+  ([TOP-HIER-8]). **[bankside]**
 
   So, for the host and for DV:
   - **Rising edge.** From idle (`busy` = 0), the first trigger in cycle *f*
@@ -226,7 +284,7 @@ cycle 2. Either way the configuration write is ignored in cycle 2, because
 
 ![Case P: busy rises the cycle after the first trigger and falls 5 cycles after the last](img/busy_rise_fall.svg)
 
-*Figure 1: case P, [TOP-IF-7] and [TOP-IF-8]. "PC 0 MOV" is
+*Figure 2: case P, [TOP-IF-7] and [TOP-IF-8]. "PC 0 MOV" is
 `MOV GRF_A[0], EVEN_BANK`. The first trigger is in cycle 2
 (marker a) and `busy` rises in cycle 3 (marker b). EXIT, the last slot, is
 issued in cycle 3 and is in S5 in cycle 7. `busy` falls in cycle 8 (marker c),
@@ -300,7 +358,8 @@ repo root: `.venv/bin/python src/top/doc/examples/busy_trace.py` (output
 [examples/busy_trace.out](examples/busy_trace.out); exits non-zero if a
 check fails or a table here differs from the script's).
 
-**Timing diagrams.** Figure 1 above shows `busy` (case P), and Figure 2 in
+**Timing diagrams.** Figure 1 above shows the unit before its first reset
+([TOP-IF-13]), Figure 2 shows `busy` (case P), and Figure 5 in
 the [theory of operation](theory_of_operation.md#why-the-distance-is-4)
 shows a bank store and a load of its column on the same edge (case E,
 [TOP-IF-2], [TOP-IF-3]). They are drawn from the spec. Waveforms of the RTL

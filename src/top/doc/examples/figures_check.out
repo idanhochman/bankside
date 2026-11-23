@@ -1,0 +1,12 @@
+ok   1 instr_control.reg.json: 3 fields at the yaml's bits, the rest unnamed
+ok   1 instr_data.reg.json: 6 fields at the yaml's bits, the rest unnamed
+ok   1 instr_alu.reg.json: 9 fields at the yaml's bits, the rest unnamed
+ok   2 bank_store_load.wave.json: 3 rows, slots and stages where trig_valid puts them
+ok   2 busy_rise_fall.wave.json: 2 rows, slots and stages where trig_valid puts them
+ok   2 hazard_distance_3.wave.json: 3 rows, slots and stages where trig_valid puts them
+ok   2 mac_accumulator_bypass.wave.json: 3 rows, slots and stages where trig_valid puts them
+ok   3 mac_accumulator_bypass.wave.json: S4 reads {5: '2.0', 6: '2.5'}, S5 writes {5: '2.0', 6: '2.5', 7: '4.0'}, as hazard_trace.py's case D
+ok   4 busy_rise_fall.wave.json: busy = a slot in the 4 cycles before ([TOP-IF-7])
+ok   5 first_reset.wave.json: undefined through cycle 3, the first with rst_n = 0; reset values after it ([TOP-IF-13])
+
+ok   all figures match

@@ -1,0 +1,16 @@
+{
+  "signal": [
+    {"name": "clk", "wave": "p......"},
+    {"name": "trig_valid", "wave": "1..0..."},
+    {},
+    {"name": "PC 0 MOV GRF_B[2], SRF_M[1]", "wave": "=====x.", "data": ["S1", "S2", "S3", "S4", "S5"], "node": "....a.."},
+    {"name": "PC 1 MAC GRF_B[2], GRF_A[1], SRF_M[0]", "wave": "x=====x", "data": ["S1", "S2", "S3", "S4", "S5"], "node": "....bc."},
+    {"name": "PC 2 MAC GRF_B[2], GRF_A[1], SRF_M[2]", "wave": "xx=====", "data": ["S1", "S2", "S3", "S4", "S5"], "node": ".....d."},
+    {},
+    {"name": "grf_b port 2 (S4 accumulator)", "wave": "x...==x", "data": ["2.0", "2.5"]},
+    {"name": "grf_b write (S5), GRF_B[2]", "wave": "x...===", "data": ["2.0", "2.5", "4.0"]}
+  ],
+  "edge": ["a~>b", "c~>d"],
+  "head": {"tick": 1},
+  "config": {"hscale": 2}
+}

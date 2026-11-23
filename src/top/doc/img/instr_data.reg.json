@@ -1,0 +1,15 @@
+{
+  "reg": [
+    {"bits": 4},
+    {"bits": 3, "name": "src0_idx"},
+    {"bits": 1},
+    {"bits": 3, "name": "dst_idx"},
+    {"bits": 1},
+    {"bits": 1, "name": "relu"},
+    {"bits": 9},
+    {"bits": 3, "name": "src0"},
+    {"bits": 3, "name": "dst"},
+    {"bits": 4, "name": "opcode"}
+  ],
+  "config": {"bits": 32, "lanes": 1, "hspace": 1000, "fontsize": 12}
+}

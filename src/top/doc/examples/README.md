@@ -16,6 +16,8 @@ non-zero if the spec disagrees with itself.
 | [regfile_ports.py](regfile_ports.py) | The read ports each register file needs, counted from the yaml's legal combinations (S2 sources plus the S4 accumulator), against the theory-of-operation table; backs [TOP-ARCH-10] and the `pcu_regfile` instance table ([TOP-HIER-4]) | [regfile_ports.out](regfile_ports.out) | `.venv/bin/python src/top/doc/examples/regfile_ports.py` |
 | [hazard_trace.py](hazard_trace.py) | A cycle-level model of register-file reads and writes (S2 sources, the S4 accumulator, S5 writes, triggers and bubbles), with and without write-through: the theory of operation's hazard traces (cases A to D), the distance sweep k = 1 to 4, and 20000 random programs checked against in-order execution ([TOP-HAZ-1], [TOP-HAZ-3], [TOP-HAZ-4]) and every S2 read against [TOP-HAZ-5]. Section 4 adds the v1 bank (S1 request, S5 store, write-first or read-first on the same edge, [TOP-IF-2], [TOP-IF-3]): store then load at the limit (case E), [TOP-HAZ-6] broken with an older store in flight and with a bubble (cases F, G), the bank distance sweep k = 1 to 6, and 20000 random programs with loads and stores checked against in-order execution and every bank read against [TOP-HAZ-7]. Section 5 compares every write in S5 ([TOP-PIPE-1]) with ANEMOS's early writes (cases H, I) | [hazard_trace.out](hazard_trace.out) | `.venv/bin/python src/top/doc/examples/hazard_trace.py` |
 | [cfg_dbg_ports.py](cfg_dbg_ports.py) | The configuration and debug ports over all 8 selects and 32 indices ([TOP-IF-9] to [TOP-IF-12]): the select table in interfaces.md against the yaml, which writes take effect, what each read returns, the out-of-range options, and the debug read in the cycle of a write (write-through or not, with the [TOP-IF-8] gate) | [cfg_dbg_ports.out](cfg_dbg_ports.out) | `.venv/bin/python src/top/doc/examples/cfg_dbg_ports.py` |
+| [figures_check.py](figures_check.py) | The figures against the yaml and the models: the three instruction bitfields of the programmer's guide against the yaml's `formats`; in every timing diagram, each instruction's stages at the cycles its trigger gives ([TOP-IF-1], [TOP-PIPE-1]); the accumulator-bypass figure against `hazard_trace.py`'s case D ([TOP-HAZ-2]); `busy` in the busy figure ([TOP-IF-7]); the before-the-first-reset figure against [TOP-IF-13] | [figures_check.out](figures_check.out) | `.venv/bin/python src/top/doc/examples/figures_check.py` |
+| [spec_check.py](spec_check.py) | The whole suite, below | – | `.venv/bin/python src/top/doc/examples/spec_check.py` |
 | [busy_trace.py](busy_trace.py) | A slot-level model of triggers, NOP slots, the loop state, EXIT and reset, with every slot a pipeline entry ([TOP-PIPE-4]): `busy` per [TOP-IF-7] against options (1b) and (2b), cycle by cycle for the worked cases (P, Q, S checked word for word against the tables in interfaces.md; R and T printed), and 5000 random runs checking that (1b) accepts the same configuration writes ([TOP-IF-8]), that no accepted write meets an S5 write ([TOP-HIER-6]), and the falling-edge rule | [busy_trace.out](busy_trace.out) | `.venv/bin/python src/top/doc/examples/busy_trace.py` |
 
 The ANEMOS behaviour in `loop_trace.py` is read from github.com/gem5-X/cnm_framework
@@ -39,3 +41,58 @@ from a register and a bank store written in the decode cycle, bank loads
 through the write pipeline, no busy output) are read from the same commit
 (`src/instr_decoder.cpp`: `grfa_wr_en_comb`, `even_out_en`,
 `wr_en_pipe[MULT_STAGES + ADD_STAGES]`; `src/interface_unit.cpp`), not run.
+
+## The whole suite
+
+[spec_check.py](spec_check.py) runs every check of every module's spec in
+one command, from the repo root:
+
+```
+.venv/bin/python src/top/doc/examples/spec_check.py
+```
+
+1. Every script in `src/*/doc/examples/`, six at a time. Each must exit 0,
+   and where the saved `.out` is the output of the script's default command
+   (every script but the three below), the new output must equal it byte
+   for byte. `--update` rewrites the `.out` files that differ instead; use
+   it only when the change is intended, and commit them with the change.
+2. `.claude/skills/diagrams/scripts/render.py --check src/`: every SVG
+   exists and matches its source.
+3. Requirement IDs across all modules: each defined once, in the doc of the
+   module whose prefix it carries ([TOP-HIER-1]); every ID referenced is
+   defined (VER-n in DV's [testplan](../../dv/README.md)).
+4. Every relative link and anchor in `src/*/doc/` and `src/*/README.md`.
+
+It takes about six minutes on six cores (`fadd_check.py` is the longest)
+and exits non-zero if anything fails. `paper_table3.py` isn't run: it needs
+your own copy of the paper.
+
+### The NumPy and ANEMOS runs
+
+Three scripts have a fuller form, and their saved `.out` is from it:
+
+| Script | Full command, from the repo root | Needs | Time |
+|---|---|---|---|
+| `src/fp16_mul/doc/examples/fmul_check.py` | `<py> src/fp16_mul/doc/examples/fmul_check.py --numpy --exhaustive --anemos src/fp16_mul/doc/examples/anemos_fmul.out` | NumPy | about 15 minutes |
+| `src/fp16_add/doc/examples/fadd_check.py` | `<py> src/fp16_add/doc/examples/fadd_check.py --numpy --exhaustive --anemos src/fp16_add/doc/examples/anemos_fadd.out` | NumPy | about 30 minutes |
+| `src/top/doc/examples/fp_relu_nan.py` | `<py> src/top/doc/examples/fp_relu_nan.py --numpy --anemos src/top/doc/examples/anemos_fp.out` | NumPy | seconds |
+
+`<py>` is a Python with NumPy. The repo's `.venv` has none, so the saved
+outputs came from the system `python3` (CPython 3.12.3, NumPy 2.5.1,
+x86-64). To reproduce them without touching `.venv`, make a scratch
+environment with the same NumPy:
+
+```
+python3 -m venv <scratch>/np
+<scratch>/np/bin/pip install numpy==2.5.1
+.venv/bin/python src/top/doc/examples/spec_check.py --full --numpy-python <scratch>/np/bin/python
+```
+
+`--full` runs the three full commands as well, with that interpreter, and
+compares their output with the saved `.out` files. The ANEMOS halves read
+the saved ANEMOS outputs (`anemos_fmul.out`, `anemos_fadd.out`,
+`anemos_fp.out`); rebuilding those needs SystemC and an ANEMOS checkout, as
+each module's doc says. The NaN column of `fp_relu_nan.py` and the NumPy
+NaN bits depend on the host's floating-point unit (x86-64 here). Whether
+NumPy becomes a dependency of `.venv`, so that CI can run the full form,
+is for the maintainer or DV to decide; the spec doesn't need it.

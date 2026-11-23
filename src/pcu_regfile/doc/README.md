@@ -48,6 +48,8 @@ top spec:
 [TOP-IF-10]: ../../top/doc/interfaces.md#register-file-access-through-the-ports
 [TOP-IF-11]: ../../top/doc/interfaces.md#register-file-access-through-the-ports
 [TOP-IF-12]: ../../top/doc/interfaces.md#register-file-access-through-the-ports
+[TOP-IF-13]: ../../top/doc/interfaces.md#timing
+[TOP-ARCH-11]: ../../top/doc/theory_of_operation.md#architecture
 
 **Sources.** The papers give the five files' sizes and roles (the
 [register-file table](../../top/doc/theory_of_operation.md#register-files)),
@@ -134,7 +136,10 @@ rule says so.
   doesn't, for the reasons given under [TOP-ARCH-5].
 
 - **[RF-6]** **Reading an entry never written.** Until its first write, an
-  entry reads as its power-up value, as [TOP-ARCH-9] defines it: the same
+  entry reads as its power-up value, as [TOP-ARCH-9] defines it (in `top`,
+  the value at the end of the first reset cycle, since an undefined S5
+  write may land before it, [TOP-IF-13]; on its own, with `wr_en` = 0,
+  the value from power-up): the same
   bits on every read port and on the debug port, in every cycle, until the
   write; not predicted by the spec. In simulation those bits are random per
   run, from the run's seed, under the Verilator options [TOP-ARCH-9] names;
@@ -156,7 +161,8 @@ rule says so.
   *t* + 1 on; in cycle *t* itself it reaches the read ports only through
   write-through ([RF-9], [RF-10]). **[bankside]**, **[ANEMOS]** (written on
   `clk.pos()` when `wr_en`), following [TOP-HAZ-1] ("the write takes effect
-  at the end of the cycle").
+  at the end of the cycle") and the rising edge of [TOP-ARCH-11], the top
+  spec's rule for every register of the unit.
 
 ### Read
 

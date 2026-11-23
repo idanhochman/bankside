@@ -1,6 +1,7 @@
 # bankside specification
 
-**Status: draft.**
+**Status: v1.** Closed with the architecture milestone (M1, #13). Changes
+from here on go through spec-gap and decision issues.
 
 bankside is an open-source SystemVerilog near-bank compute unit, in the class
 of the processing unit inside Samsung's HBM-PIM (Aquabolt-XL). One unit sits
@@ -41,6 +42,24 @@ by Samsung. It is a clean-room design from public papers.
 | [hierarchy.md](hierarchy.md) | The v1 modules, their prefixes, and how `top` connects them |
 | [../dv/README.md](../dv/README.md) | Verification requirements |
 | [bankside_isa.yaml](bankside_isa.yaml) | Machine-readable ISA: **the source of truth for the encoding** |
+| [examples/README.md](examples/README.md) | The scripts behind the worked cases, and how to rerun them |
+
+Each module of the unit has its own spec, linked from
+[hierarchy.md](hierarchy.md#where-each-module-is-specified).
+
+## Checking the spec
+
+One command runs every check of every module's spec: the example scripts
+(each output compared with its saved `.out`), the diagrams, the requirement
+IDs across all modules, and every link. From the repo root:
+
+```
+.venv/bin/python src/top/doc/examples/spec_check.py
+```
+
+It takes about six minutes and exits non-zero if anything fails;
+`--full` adds the NumPy and ANEMOS runs. Details:
+[examples/README.md](examples/README.md#the-whole-suite).
 
 ## Conventions
 

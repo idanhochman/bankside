@@ -70,6 +70,7 @@ this module carries out are those of the top spec:
 [DP-10]: ../../pcu_datapath/doc/README.md#s3-and-s4-the-lanes
 [DP-11]: ../../pcu_datapath/doc/README.md#s3-and-s4-the-lanes
 [VER-5]: ../../top/dv/README.md
+[CMN-2]: ../../common/doc/README.md#the-package
 
 **Sources.** The papers give the encoding (ISCA 2021, Table III, checked by
 the top spec's [paper_table3.py](../../top/doc/examples/paper_table3.py)) and
@@ -349,9 +350,8 @@ right.
   package in `src/common/rtl/`, named **`bankside_pkg`**. `pcu_decode`,
   `pcu_ctrl` and `pcu_datapath` import them from there, and DV's models take
   the same names and values. The package adds no rule of its own; this doc
-  is the one that defines these four. **[bankside]** The `common` doc
-  doesn't list its package's contents yet; it is to point here for these
-  four (see the PR).
+  is the one that defines these four. **[bankside]** The `common` doc lists
+  the package's contents in [CMN-2], which points here for these four.
 
 ### Timing
 

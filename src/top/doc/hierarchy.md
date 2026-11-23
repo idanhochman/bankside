@@ -3,8 +3,8 @@
 This page splits the v1 unit into modules and says how `top` connects them.
 Each child's ports, timing and requirement IDs are defined in the child's own
 doc (`src/<module>/doc/`); this page refers to them and never copies them.
-Until those docs exist (the per-module tasks under #12), the "What each
-module's doc defines" section below is the list of what they must contain.
+[Where each module is specified](#where-each-module-is-specified) lists
+them.
 
 The module boundaries don't change any behaviour in
 [theory_of_operation.md](theory_of_operation.md),
@@ -31,7 +31,7 @@ differently, the rule says how.
 | [`fp16_mul`](../../fp16_mul/doc/README.md) | 16, one per lane | `pcu_datapath` | `FMUL` | One FP16 multiply, combinational ([TOP-HIER-3]). | M2 |
 | [`fp16_add`](../../fp16_add/doc/README.md) | 16, one per lane | `pcu_datapath` | `FADD` | One FP16 add, combinational ([TOP-HIER-3]). | M2 |
 | [`pcu_regfile`](../../pcu_regfile/doc/README.md) | `crf`, `grf_a`, `grf_b`, `srf_m`, `srf_a` | `top` | `RF` | A parameterised register file: depth, width, number of read ports; combinational reads, write-through, one write port, no reset ([TOP-HIER-4]). | M4 |
-| [`common`](../../common/doc/README.md) | – | none | `CMN` | Exists already. Holds the SystemVerilog package of types shared by several modules ([TOP-HIER-9]). | M2 |
+| [`common`](../../common/doc/README.md) | – | none | `CMN` | No module: the SystemVerilog package `bankside_pkg`, with the constants and types shared by several modules ([TOP-HIER-9]). | M4 |
 
 `fp16_mul` and `fp16_add` are the names [VER-4] in the
 [verification requirements](../dv/README.md) uses. The lane generate-block and
@@ -75,6 +75,19 @@ that specifies it, and its prefix. Source: [top_hierarchy.dot](img/top_hierarchy
   **[ANEMOS]** (one `fp_multiplier` and one `fp_adder` per lane, in its
   `fpu`), **[bankside]** (combinational). ANEMOS's units are clocked, with
   `MULT_STAGES` pipeline registers inside `fp_multiplier`.
+
+  The paper (ISCA 2021, Section III-A) describes "a pair of 16 FP16
+  multipliers and adders, each with 5 stages". bankside reads "5 stages" as
+  the five-stage pipeline of Section IV-B, in which the multiply is one
+  stage (MULT, S3) and the add one stage (ADD, S4), not as five registers
+  inside each unit. **[paper]** (that reading of the two sections),
+  **[ANEMOS]** (its model of the paper has one register after each unit,
+  `MULT_STAGES` = `ADD_STAGES` = 1, `src/defs.h` at `f2d4018`). That one
+  register per unit is `pcu_datapath`'s S3/S4 and S4/S5 register, not a
+  register inside the unit, which stays combinational for the reason
+  below. The unit docs give the same reading
+  ([`fp16_mul`](../../fp16_mul/doc/README.md#overview),
+  [`fp16_add`](../../fp16_add/doc/README.md#overview)).
 
   Why combinational: the accumulator bypass ([TOP-HAZ-2]) is a one-cycle loop
   S5 → S4 accumulator read → `fp16_add` → S4/S5 register. A register inside
@@ -125,72 +138,98 @@ the debug read are left out). Dashed lines are configuration paths. Bundle
 names are those of the table below; the signals in each are defined by the
 child docs. Source: [top_connections.dot](img/top_connections.dot).*
 
-Each row is one bundle. "Defined by" names the doc that defines its signals
-and timing; `top` connects them one-to-one unless the row says otherwise.
-**[bankside]** throughout.
+Each row is one bundle. Port names are those of the child docs: `ctrl.x` is
+port `x` of `pcu_ctrl` ([its ports](../../pcu_ctrl/doc/README.md#ports)),
+`dp.x` of `pcu_datapath` ([its ports](../../pcu_datapath/doc/README.md#ports)),
+and `grf_b.x` of that instance of `pcu_regfile`
+([its ports](../../pcu_regfile/doc/README.md#ports)). "Defined by" names the
+doc that defines the signals and their timing; `top` connects them
+one-to-one, port to port of the same name and width, unless the row says
+otherwise. **[bankside]** throughout.
 
 | Bundle | From → to | Stage | Defined by |
 |---|---|---|---|
-| `clk` | top port → `ctrl`, `dp`, all `pcu_regfile` instances | – | [interfaces.md](interfaces.md) |
-| `rst_n` | top port → `ctrl`, `dp` only (register files aren't reset, [TOP-ARCH-5]) | – | [interfaces.md](interfaces.md) |
-| trigger: `trig_valid`, `trig_row`, `trig_col` | top ports → `ctrl` | S1 | [interfaces.md](interfaces.md), `pcu_ctrl` |
-| fetch | `ctrl` ↔ `crf` read port(s): address out, instruction word back | S1 | `pcu_ctrl`, `pcu_regfile` |
-| bank read request: `bank_rd_en`, `bank_rd_sel`, `bank_rd_row`, `bank_rd_col` | `ctrl` → top ports | S1 ([TOP-IF-2]) | `pcu_ctrl` |
-| issue (the S1/S2 register) | `ctrl` → `dp` | S1/S2 | `pcu_ctrl` (its fields come from `pcu_decode`) |
-| `bank_rd_data` | top port → `dp` | S2 ([TOP-IF-2]) | [interfaces.md](interfaces.md), `pcu_datapath` |
-| S2 reads | `dp` ↔ `grf_a` ports 0–1, `grf_b` ports 0–1, `srf_m` port 0, `srf_a` port 0 | S2 | `pcu_datapath`, `pcu_regfile` |
-| S4 accumulator read | `dp` ↔ `grf_b` port 2 | S4 | `pcu_datapath`, `pcu_regfile` |
-| S5 write | `dp` → write-port select → `grf_a`, `grf_b`, `srf_m`, `srf_a` | S5 | `pcu_datapath` |
-| bank write: `bank_wr_*` | `dp` → top ports | S5 ([TOP-IF-3]) | `pcu_datapath` |
-| configuration: `cfg_*` | top ports → `crf` write port, and → write-port select | – | [interfaces.md](interfaces.md) |
-| debug read: `dbg_rd_*` | top ports ↔ the debug read port of every instance, through the debug select | – | [interfaces.md](interfaces.md), `pcu_regfile` |
-| `busy` | `ctrl` and `dp` → OR → top port | – | `pcu_ctrl`, `pcu_datapath` ([TOP-HIER-8]) |
-| `err_illegal` | `ctrl` → top port | – | `pcu_ctrl` |
+| `clk` | top port → `ctrl.clk`, `dp.clk`, `clk` of all five `pcu_regfile` instances | – | [interfaces.md](interfaces.md), [TOP-ARCH-11] |
+| `rst_n` | top port → `ctrl.rst_n`, `dp.rst_n` only (register files aren't reset, [TOP-ARCH-5]) | – | [interfaces.md](interfaces.md) |
+| trigger: `trig_valid`, `trig_row`, `trig_col` | top ports → `ctrl` ports of the same names | S1 | [interfaces.md](interfaces.md), `pcu_ctrl` |
+| fetch | `ctrl.crf_rd_idx` → `crf.rd_idx`; `crf.rd_data` → `ctrl.crf_rd_data` (2 ports, [CTRL-3]) | S1 | `pcu_ctrl`, `pcu_regfile` |
+| bank read request: `bank_rd_en`, `bank_rd_sel`, `bank_rd_row`, `bank_rd_col` | `ctrl` → top ports of the same names | S1 ([TOP-IF-2]) | `pcu_ctrl` |
+| issue (the S1/S2 register): `iss_valid`, `iss_instr`, `iss_row`, `iss_col` | `ctrl` → `dp`, port to port | S1/S2 | `pcu_ctrl` (the fields of `iss_instr` come from `pcu_decode`) |
+| `bank_rd_data` | top port → `dp.bank_rd_data` | S2 ([TOP-IF-2]) | [interfaces.md](interfaces.md), `pcu_datapath` |
+| S2 reads | `dp.grf_a_rd_idx` → `grf_a.rd_idx`, `grf_a.rd_data` → `dp.grf_a_rd_data` (ports 0–1); `grf_b` ports 0–1, the low two entries of `dp.grf_b_rd_idx` and `dp.grf_b_rd_data`; `srf_m` and `srf_a` port 0, from `dp.srf_m_rd_*` and `dp.srf_a_rd_*` ([DP-3]) | S2 | `pcu_datapath`, `pcu_regfile` |
+| S4 accumulator read | `dp.grf_b_rd_idx[2]` → `grf_b.rd_idx[2]`, `grf_b.rd_data[2]` → `dp.grf_b_rd_data[2]`: `grf_b`'s port 2 ([DP-11], [TOP-HIER-5]) | S4 | `pcu_datapath`, `pcu_regfile` |
+| S5 writes, one bundle per file | `dp.grf_a_wr_en`, `dp.grf_a_wr_idx`, `dp.grf_a_wr_data` → write-port select → `grf_a.wr_en`, `grf_a.wr_idx`, `grf_a.wr_data`; the same for `grf_b`, `srf_m`, `srf_a` ([TOP-HIER-6]) | S5 | `pcu_datapath` |
+| bank write: `bank_wr_en`, `bank_wr_sel`, `bank_wr_row`, `bank_wr_col`, `bank_wr_data` | `dp` → top ports of the same names | S5 ([TOP-IF-3]) | `pcu_datapath` |
+| configuration: `cfg_*` | top ports → `cfg_wr_en` gate and write-port select → `crf` write port and the four other write ports ([TOP-HIER-6]) | – | [interfaces.md](interfaces.md) |
+| debug read: `dbg_rd_*` | `dbg_rd_idx` → `dbg_idx` of every instance; every instance's `dbg_data` → debug select → `dbg_rd_data` ([TOP-HIER-7]) | – | [interfaces.md](interfaces.md), `pcu_regfile` |
+| `busy` | `ctrl.busy` OR `dp.busy` → top port ([TOP-HIER-8]) | – | `pcu_ctrl`, `pcu_datapath` |
+| `err_illegal` | `ctrl.err_illegal` → top port | – | `pcu_ctrl` |
 
-The glue that `top` itself contains:
+The glue that `top` itself contains, all of it combinational:
 
-- **[TOP-HIER-6]** **Write-port select.** For each of `grf_a`, `grf_b`,
-  `srf_m` and `srf_a`: when `cfg_wr_en` = 1 and `cfg_wr_sel` is that file's
-  operand code, the write port takes `cfg_wr_idx` and the low bits of
-  `cfg_wr_data` (256, 256, 16, 16 bits); otherwise it takes `dp`'s S5 write
-  for that file. `crf` is written only from `cfg_*`, when `cfg_wr_sel` = 7,
-  with `cfg_wr_data[31:0]`. A configuration write counts only while `busy`
-  = 0 and `trig_valid` = 0 ([TOP-IF-8]), so it never meets an S5 write.
-  The select also does [TOP-IF-10]: a write with `cfg_wr_sel` = 4, 5 or 6,
-  or with `cfg_wr_idx` ≥ 8 for a GRF or SRF, enables no instance's write
-  port. An instance's write index is only as wide as its depth needs (3
-  bits, 5 for `crf`), so `pcu_regfile` never sees an out-of-range index.
-  **[bankside]**
-- **[TOP-HIER-7]** **Debug read.** Every instance's debug read port takes its
-  index from `dbg_rd_idx`; `dbg_rd_sel` chooses which instance drives
-  `dbg_rd_data`. The synthesis wrapper in `src/top/syn/` ties `dbg_rd_*` off,
-  so the debug ports drop out of the PPA ([interfaces.md](interfaces.md#debug-port)).
-  **[bankside]** The select also does [TOP-IF-11]: it zero-extends the
-  instance's data to 256 bits, and drives 0 for `dbg_rd_sel` = 4, 5 or 6 or
-  for `dbg_rd_idx` ≥ 8 with a GRF or SRF selected (the instance gets the low
-  3 bits of the index, and its output is not used). The same-cycle behaviour
-  of [TOP-IF-12] is the debug port's write-through in `pcu_regfile`, the
-  same as on every other read port, so `pcu_regfile` needs no per-port
-  write-through parameter. The write-through compares against the instance's
-  write port after the write-port select, so a configuration write that
-  [TOP-IF-8] or [TOP-IF-10] ignores is never shown.
-- **[TOP-HIER-8]** **Busy.** `busy` is the OR of a `busy` output of `ctrl`
-  and one of `dp`, together the terms of [TOP-IF-7]. `ctrl`'s covers an
-  entry in S2 (the valid bit of its S1/S2 register), NOP slots left and
-  `loop_active`. `dp`'s covers an entry in S3, S4 or S5 (the valid bits of
-  its S2/S3, S3/S4 and S4/S5 registers). Every slot sets the S1/S2 valid
-  bit, whatever it issues ([TOP-PIPE-4]), and a valid bit moves down with
-  its entry whether or not the entry writes anything. Both outputs come
-  from registers only, so `busy` has no combinational path from any input.
+- **[TOP-HIER-6]** **Write-port select.** For each of the four files *f* in
+  `grf_a`, `grf_b`, `srf_m`, `srf_a`, with *code* its operand code (0 to 3,
+  [TOP-IF-9]) and *W* its width (256, 256, 16, 16), and for `crf`:
+
+  ```
+  cfg_ok   = cfg_wr_en && !busy && !trig_valid                 // [TOP-IF-8]
+  cfg_f    = cfg_ok && cfg_wr_sel == code && cfg_wr_idx < 8     // [TOP-IF-10]
+  f.wr_en  = cfg_f ? 1                    : dp.f_wr_en
+  f.wr_idx = cfg_f ? cfg_wr_idx[2:0]      : dp.f_wr_idx
+  f.wr_data= cfg_f ? cfg_wr_data[W-1:0]   : dp.f_wr_data
+
+  crf.wr_en   = cfg_ok && cfg_wr_sel == 7
+  crf.wr_idx  = cfg_wr_idx
+  crf.wr_data = cfg_wr_data[31:0]
+  ```
+
+  `busy` is the top output ([TOP-HIER-8]), from registers only, so the gate
+  has no combinational loop. A configuration write that counts needs
+  `busy` = 0, so after the first reset it never meets an S5 write: every
+  `dp.*_wr_en` is 0 while `dp.busy` = 0. Before the end of the first reset
+  cycle the enables are undefined ([TOP-IF-13]), and the host doesn't write
+  configuration then. A write with `cfg_wr_sel` = 4, 5 or 6, or with
+  `cfg_wr_idx` ≥ 8 for a GRF or SRF, enables no instance's write port
+  ([TOP-IF-10]). An instance's write index is only as wide as its depth
+  needs (3 bits, 5 for `crf`), so `pcu_regfile` never sees an
+  out-of-range index. **[bankside]**
+- **[TOP-HIER-7]** **Debug read.** Every instance's `dbg_idx` takes the low
+  bits of `dbg_rd_idx` (3 bits, all 5 for `crf`), and the debug select
+  drives `dbg_rd_data`:
+
+  ```
+  dbg_rd_data = dbg_rd_sel == code(f) && dbg_rd_idx < 8 ? zero-extend(f.dbg_data)   // f a GRF or SRF
+              : dbg_rd_sel == 7                         ? zero-extend(crf.dbg_data)
+              : 0                                                                     // [TOP-IF-11]
+  ```
+
+  The instance's `dbg_data` is write-through against its own write port,
+  after the write-port select ([RF-10]), so a debug read in the cycle of a
+  write shows the value being written ([TOP-IF-12]), and a configuration
+  write that [TOP-IF-8] or [TOP-IF-10] ignores, which never reaches a write
+  port, is never shown. `pcu_regfile` needs no per-port write-through
+  parameter. The synthesis wrapper in `src/top/syn/` ties `dbg_rd_*` off,
+  so the debug ports drop out of the PPA
+  ([interfaces.md](interfaces.md#debug-port)). **[bankside]**
+- **[TOP-HIER-8]** **Busy.** `busy` = `ctrl.busy` OR `dp.busy`, together the
+  terms of [TOP-IF-7]. `ctrl`'s covers an entry in S2 (the valid bit of its
+  S1/S2 register), NOP slots left and `loop_active` ([CTRL-13]). `dp`'s
+  covers an entry in S3, S4 or S5 (the valid bits of its S2/S3, S3/S4 and
+  S4/S5 registers, [DP-15]). Every slot sets the S1/S2 valid bit, whatever
+  it issues ([TOP-PIPE-4]), and a valid bit moves down with its entry
+  whether or not the entry writes anything. Both outputs come from
+  registers only, so `busy` has no combinational path from any input.
   **[bankside]**
 
 ## Shared package and the wrapper
 
 - **[TOP-HIER-9]** Types used by more than one module (the opcode and
   operand codes of [bankside_isa.yaml](bankside_isa.yaml), and the decoded
-  instruction of `pcu_decode`'s doc) are in one SystemVerilog package in
-  `src/common/rtl/`. The package implements those docs and adds no rule of its
-  own. **[bankside]**
+  instruction of `pcu_decode`'s doc) are in one SystemVerilog package,
+  `bankside_pkg` in `src/common/rtl/`, specified by
+  [`common`'s doc](../../common/doc/README.md#the-package), which lists its
+  contents. The package implements those docs and adds no rule of its own.
+  **[bankside]**
 - **[TOP-HIER-10]** v1 has **no wrapper module**: `top` is the unit, with the
   ports of [interfaces.md](interfaces.md), and instantiates its children
   directly. The synthesis wrapper of [TOP-HIER-7] is a file of `src/top/syn/`,
@@ -295,22 +334,39 @@ Script: [examples/regfile_ports.py](examples/regfile_ports.py), output
 root: `.venv/bin/python src/top/doc/examples/regfile_ports.py` (exits
 non-zero if the counts disagree with the register-file table).
 
-## What each module's doc defines
+## Where each module is specified
 
-The per-module tasks (#12) write these. Each doc defines its own ports and
-timing; the rules it carries out are cited by their `TOP-` IDs, not copied.
+Each child's doc defines its own ports, timing and requirement IDs, and
+cites the `TOP-` rules it carries out; this page doesn't restate them.
+Each doc opens with a table from the top rules to its own.
 
-| Module | Its doc defines | Settled first by |
-|---|---|---|
-| [`fp16_mul`](../../fp16_mul/doc/README.md) | Ports (two FP16 operands, one result), combinational ([TOP-HIER-3]); × under [TOP-FP-1], [TOP-FP-2], [TOP-FP-4] to [TOP-FP-7]; worked cases for subnormals, overflow, ties and NaN | #7 (NaN result) |
-| [`fp16_add`](../../fp16_add/doc/README.md) | As `fp16_mul`, for +, including the signs of zero results ([TOP-FP-5]); the timing budget: one clock period, since it sits in the bypass loop | #7 |
-| [`pcu_regfile`](../../pcu_regfile/doc/README.md) | Parameters (depth, width, number of read ports); ports, with indices of clog2(depth) bits ([TOP-HIER-6], [TOP-HIER-7]); combinational read, write-through on every port including the debug port ([TOP-HAZ-1], [TOP-IF-12]), write at the edge, no reset and no initial value ([TOP-ARCH-5], [TOP-ARCH-9]) | #8, #15 |
-| [`pcu_decode`](../../pcu_decode/doc/README.md) | Input word; the decoded instruction (fields, operand selects, indices, R, the stages used, slot count, IMM0/IMM1) and the illegal flag, for every opcode, from the yaml ([TOP-ISA-1], [TOP-ISA-2], [TOP-ISA-9], [TOP-ISA-10], [TOP-ISA-15] to [TOP-ISA-21], [TOP-ISA-24], [TOP-ISA-25]). The JUMP IMM0 check ([TOP-ISA-26]) needs the PC, so `pcu_ctrl` adds it | #6 (merged), #9, #19 |
-| [`pcu_ctrl`](../../pcu_ctrl/doc/README.md) | Ports (trigger, fetch, bank read request, issue, `busy`, `err_illegal`); S1 timing; PC, loop state, NOP counter ([TOP-ISA-3] to [TOP-ISA-8], [TOP-ISA-12], [TOP-ISA-13], [TOP-ISA-26] to [TOP-ISA-28]); `err_illegal` ([TOP-ISA-24]); the zero-slot JUMP fetch and the CRF's read ports; the issue bundle (the S1/S2 register) and its valid bit ([TOP-PIPE-4]); its `busy` term ([TOP-IF-7], [TOP-HIER-8]); reset ([TOP-IF-4]) | #9, #10, #27 |
-| [`pcu_datapath`](../../pcu_datapath/doc/README.md) | Ports (issue, `bank_rd_data`, the S2 and S4 read ports, the S5 write, `bank_wr_*`, `busy`); S2 to S5 timing; source selection, SRF broadcast ([TOP-ISA-11]), ReLU ([TOP-FP-8], [TOP-ISA-30]), MOV GRF → SRF lane ([TOP-ISA-29]), the MAC accumulator read ([TOP-HIER-5]), bank stores ([TOP-ARCH-8], [TOP-IF-3]); the S3 to S5 valid bits and its `busy` term ([TOP-PIPE-4], [TOP-IF-7], [TOP-HIER-8]); lane naming (lane numbers: [TOP-ISA-29]) | #7, #8, #9, #10 |
-| [`common`](../../common/doc/README.md) | A pointer to the docs its package implements ([TOP-HIER-9]): the yaml's opcodes, operand codes and field positions as constants, and `pcu_decode`'s types; no behaviour of its own | – |
+| Module | Its doc | Its ports | The top rules it carries out |
+|---|---|---|---|
+| `pcu_ctrl` | [pcu_ctrl/doc](../../pcu_ctrl/doc/README.md) | [Ports](../../pcu_ctrl/doc/README.md#ports) | [Overview](../../pcu_ctrl/doc/README.md#overview) |
+| `pcu_decode` | [pcu_decode/doc](../../pcu_decode/doc/README.md) | [Ports](../../pcu_decode/doc/README.md#ports) | [Overview](../../pcu_decode/doc/README.md#overview) |
+| `pcu_datapath` | [pcu_datapath/doc](../../pcu_datapath/doc/README.md) | [Ports](../../pcu_datapath/doc/README.md#ports) | [Overview](../../pcu_datapath/doc/README.md#overview) |
+| `fp16_mul` | [fp16_mul/doc](../../fp16_mul/doc/README.md) | [Ports](../../fp16_mul/doc/README.md#ports) | [Overview](../../fp16_mul/doc/README.md#overview) |
+| `fp16_add` | [fp16_add/doc](../../fp16_add/doc/README.md) | [Ports](../../fp16_add/doc/README.md#ports) | [Overview](../../fp16_add/doc/README.md#overview) |
+| `pcu_regfile` | [pcu_regfile/doc](../../pcu_regfile/doc/README.md) | [Ports](../../pcu_regfile/doc/README.md#ports) | [Overview](../../pcu_regfile/doc/README.md#overview) |
+| `common` | [common/doc](../../common/doc/README.md) | none: a package, no module ([CMN-1]) | [Overview](../../common/doc/README.md#overview) |
 
-`pcu_ctrl` must exist before `pcu_decode` is created, and `pcu_datapath`
+Rules of the child docs cited on this page:
+[CTRL-3](../../pcu_ctrl/doc/README.md#ports),
+[CTRL-13](../../pcu_ctrl/doc/README.md#busy),
+[DP-3](../../pcu_datapath/doc/README.md#ports),
+[DP-11](../../pcu_datapath/doc/README.md#s3-and-s4-the-lanes),
+[DP-15](../../pcu_datapath/doc/README.md#busy),
+[RF-10](../../pcu_regfile/doc/README.md#read),
+[CMN-1](../../common/doc/README.md#the-package).
+
+[CTRL-3]: ../../pcu_ctrl/doc/README.md#ports
+[CTRL-13]: ../../pcu_ctrl/doc/README.md#busy
+[DP-3]: ../../pcu_datapath/doc/README.md#ports
+[DP-11]: ../../pcu_datapath/doc/README.md#s3-and-s4-the-lanes
+[DP-15]: ../../pcu_datapath/doc/README.md#busy
+[RF-10]: ../../pcu_regfile/doc/README.md#read
+[CMN-1]: ../../common/doc/README.md#the-package
+
+`pcu_ctrl` had to exist before `pcu_decode` was created, and `pcu_datapath`
 before `fp16_mul` and `fp16_add`: `new_module.py` needs the parent's `doc/`
-folder. Creating the parent from the template is enough; its doc can come
-later.
+folder.

@@ -1,0 +1,39 @@
+digraph top_block {
+  graph [rankdir=LR, fontname="Helvetica", fontsize=11, nodesep=0.35, ranksep=0.6,
+         newrank=true, labeljust=l];
+  node  [shape=record, fontname="Helvetica", fontsize=10, height=0.3];
+  edge  [fontname="Helvetica", fontsize=9, arrowsize=0.7];
+
+  host [label="host\n(v1: the testbench)", shape=box, style=dashed];
+  bank [label="EVEN_BANK, ODD_BANK\n(v1: the testbench)", shape=box, style=dashed];
+
+  subgraph cluster_top {
+    label="top\n(top/doc)";
+    style=rounded;
+
+    crf  [label="CRF\n32 × 32-bit\n(pcu_regfile/doc)"];
+    ctrl [label="fetch and decode\nPC, loop state, NOP counter\n(pcu_ctrl/doc, pcu_decode/doc)"];
+    rf   [label="{GRF_A\n8 × 256-bit|GRF_B\n8 × 256-bit|SRF_M\n8 × 16-bit|SRF_A\n8 × 16-bit}|(pcu_regfile/doc)"];
+    opsel [label="operand select\nSRF broadcast, ReLU\n(pcu_datapath/doc)"];
+    mul  [label="16 × FP16 MUL\n(fp16_mul/doc)"];
+    add  [label="16 × FP16 ADD\n(fp16_add/doc)"];
+    wb   [label="write-back\n(pcu_datapath/doc)"];
+  }
+
+  { rank=same; crf; rf; }
+
+  host -> ctrl [label="triggering command"];
+  host -> crf  [style=dashed, label="configuration write"];
+  host -> rf   [style=dashed, label="configuration write"];
+  crf  -> ctrl [label="instruction, 32"];
+  ctrl -> opsel [label="decoded instruction"];
+  ctrl -> bank [label="bank read request"];
+  bank -> opsel [label="bank read data, 256"];
+  rf   -> opsel [label="sources"];
+  opsel -> mul [label="256"];
+  mul  -> add [label="256"];
+  rf   -> add [label="GRF_B accumulator, 256"];
+  add  -> wb  [label="256"];
+  wb   -> rf  [label="GRF/SRF write"];
+  wb   -> bank [label="bank write, 256"];
+}
