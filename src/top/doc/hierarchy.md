@@ -31,7 +31,7 @@ differently, the rule says how.
 | [`fp16_mul`](../../fp16_mul/doc/README.md) | 16, one per lane | `pcu_datapath` | `FMUL` | One FP16 multiply, combinational ([TOP-HIER-3]). | M2 |
 | [`fp16_add`](../../fp16_add/doc/README.md) | 16, one per lane | `pcu_datapath` | `FADD` | One FP16 add, combinational ([TOP-HIER-3]). | M2 |
 | [`pcu_regfile`](../../pcu_regfile/doc/README.md) | `crf`, `grf_a`, `grf_b`, `srf_m`, `srf_a` | `top` | `RF` | A parameterised register file: depth, width, number of read ports; combinational reads, write-through, one write port, no reset ([TOP-HIER-4]). | M4 |
-| `common` | – | none | `CMN` | Exists already. Holds the SystemVerilog package of types shared by several modules ([TOP-HIER-9]). | M2 |
+| [`common`](../../common/doc/README.md) | – | none | `CMN` | Exists already. Holds the SystemVerilog package of types shared by several modules ([TOP-HIER-9]). | M2 |
 
 `fp16_mul` and `fp16_add` are the names [VER-4] in the
 [verification requirements](../dv/README.md) uses. The lane generate-block and
@@ -308,7 +308,7 @@ timing; the rules it carries out are cited by their `TOP-` IDs, not copied.
 | [`pcu_decode`](../../pcu_decode/doc/README.md) | Input word; the decoded instruction (fields, operand selects, indices, R, the stages used, slot count, IMM0/IMM1) and the illegal flag, for every opcode, from the yaml ([TOP-ISA-1], [TOP-ISA-2], [TOP-ISA-9], [TOP-ISA-10], [TOP-ISA-15] to [TOP-ISA-21], [TOP-ISA-24], [TOP-ISA-25]). The JUMP IMM0 check ([TOP-ISA-26]) needs the PC, so `pcu_ctrl` adds it | #6 (merged), #9, #19 |
 | [`pcu_ctrl`](../../pcu_ctrl/doc/README.md) | Ports (trigger, fetch, bank read request, issue, `busy`, `err_illegal`); S1 timing; PC, loop state, NOP counter ([TOP-ISA-3] to [TOP-ISA-8], [TOP-ISA-12], [TOP-ISA-13], [TOP-ISA-26] to [TOP-ISA-28]); `err_illegal` ([TOP-ISA-24]); the zero-slot JUMP fetch and the CRF's read ports; the issue bundle (the S1/S2 register) and its valid bit ([TOP-PIPE-4]); its `busy` term ([TOP-IF-7], [TOP-HIER-8]); reset ([TOP-IF-4]) | #9, #10, #27 |
 | [`pcu_datapath`](../../pcu_datapath/doc/README.md) | Ports (issue, `bank_rd_data`, the S2 and S4 read ports, the S5 write, `bank_wr_*`, `busy`); S2 to S5 timing; source selection, SRF broadcast ([TOP-ISA-11]), ReLU ([TOP-FP-8], [TOP-ISA-30]), MOV GRF → SRF lane ([TOP-ISA-29]), the MAC accumulator read ([TOP-HIER-5]), bank stores ([TOP-ARCH-8], [TOP-IF-3]); the S3 to S5 valid bits and its `busy` term ([TOP-PIPE-4], [TOP-IF-7], [TOP-HIER-8]); lane naming (lane numbers: [TOP-ISA-29]) | #7, #8, #9, #10 |
-| `common` | A pointer to the docs its package implements ([TOP-HIER-9]); no rules of its own | – |
+| [`common`](../../common/doc/README.md) | A pointer to the docs its package implements ([TOP-HIER-9]): the yaml's opcodes, operand codes and field positions as constants, and `pcu_decode`'s types; no behaviour of its own | – |
 
 `pcu_ctrl` must exist before `pcu_decode` is created, and `pcu_datapath`
 before `fp16_mul` and `fp16_add`: `new_module.py` needs the parent's `doc/`
