@@ -44,8 +44,10 @@ interface. Each unit has its unit testplan and tests.
 
 **Done when:**
 - both units are lint-clean and synthesize;
-- DV's sweeps match NumPy `float16` bit-exactly, including subnormals,
-  NaN/Inf and round-to-nearest-even ties;
+- DV's sweeps match NumPy `float16` bit-exactly, including subnormals, Inf
+  and round-to-nearest-even ties, except NaN payloads: every NaN result is the
+  canonical `0x7E00` ([TOP-FP-6]), so a NaN is checked as a NaN against NumPy
+  and its bits against `0x7E00`;
 - each unit has a unit testplan (`src/<module>/dv/README.md`) and tests, for
   `fp16_mul` and `fp16_add`;
 - each unit has review pages on both sides (`rtl/doc/`, `dv/doc/`);

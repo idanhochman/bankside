@@ -1,0 +1,8 @@
+# Python tools for working in the repo locally, outside opendv: rendering
+# diagrams, the spec's example scripts and spec_check.py.
+#   python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
+# Simulation runs in opendv's image, which has its own packages.
+wavedrom==2.0.3.post3   # diagrams skill: timing diagrams and bitfields
+PyYAML==6.0.3           # the ISA yaml
+numpy==2.5.5            # FP16 maths in the examples (spec_check.py --full)
+pypdf==7.2.0            # examples/paper_table3.py reads the paper's PDF

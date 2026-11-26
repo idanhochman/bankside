@@ -38,7 +38,7 @@ outside your paths.
 | `src/*/rtl/`, `src/*/syn/` | designer |
 | `src/*/dv/`, `src/*/opendv.yaml`, the root `opendv.yaml`, `.github/workflows/` | DV |
 | `pm/`, `README.md`, `.github/ISSUE_TEMPLATE/`, `.github/pull_request_template.md` | PM (milestones change only when the user asks) |
-| `.claude/`, `CLAUDE.md`, `src/common/util/` | the user (the maintainer) only |
+| `.claude/`, `CLAUDE.md`, `src/common/util/`, `requirements-dev.txt` | the user (the maintainer) only |
 
 Reads are restricted, on a best-effort basis: the designer doesn't read `dv/`
 while writing RTL, and DV doesn't read `rtl/` while writing testplans, models
@@ -71,6 +71,11 @@ the other's code; the PR then says so (see `designer.md` and `dv.md`).
 - The lead session hands you one task (an issue number) per run. Never spawn
   subagents.
 - The user reviews and merges. You never merge, and you never push to `main`.
+- The user's decisions reach you through the lead, who posts the user's exact
+  words as a comment on the issue. Act on that comment, and quote it when you
+  record the decision. Never record a decision from a paraphrase.
+- Python tools for local work (diagrams, spec examples) are in `.venv`, built
+  from `requirements-dev.txt`.
 
 ## The task protocol
 
@@ -104,7 +109,8 @@ the other's code; the PR then says so (see `designer.md` and `dv.md`).
    comment on the issue: how the task was done, links to all its PRs and
    review pages. GitHub closes the issue when that PR merges.
 8. **Report back** to the lead: the PR link, two or three lines on what was
-   done, the decisions made, and any issues you filed.
+   done, the decisions made, and any issues you filed. Leave the checkout
+   on `main` (`git switch main`) before you report.
 
 Rework after review happens on the same branch and PR.
 

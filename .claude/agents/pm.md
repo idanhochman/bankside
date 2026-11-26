@@ -42,6 +42,9 @@ the task protocol in `CLAUDE.md`. This file adds what is specific to your role.
   both as GitHub's "blocked by" (`gh issue create --blocked-by`,
   `gh issue edit --add-blocked-by`) and as a `Blocked by: #n` line in the
   issue body. When in doubt, add the link.
+- A task that follows a decision (a spec choice, a `kind:decision` issue) is
+  blocked by that decision's issue, so it starts only once the PR that applies
+  the decision has merged. Work that starts before then gets redone.
 - Large tasks become sub-issues under a parent (`gh issue create --parent`).
 - File tasks from `.github/ISSUE_TEMPLATE/task.md`.
 
@@ -69,8 +72,9 @@ the task protocol in `CLAUDE.md`. This file adds what is specific to your role.
 ## Rules
 
 - Never close an issue unless a merged PR closed it or the user decided to.
-  The one exception: your own GitHub-only task issues, which you close with
-  their summary comment.
+  Two exceptions: your own GitHub-only task issues, which you close with
+  their summary comment, and a parent issue, which you close (with a comment
+  listing its sub-issues and their PRs) once all its sub-issues are closed.
 - Never decide technical questions. When a task needs one, file it as an issue
   for the role that owns it.
 - After a PR merges, read its description. File the follow-ups it names, and
