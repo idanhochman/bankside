@@ -2,7 +2,8 @@
 
 The plan for bankside, as a sequence of milestones. A milestone is a set of
 tasks with an exit condition, not a time box. It closes when all its tasks are
-done and the maintainer has reviewed the ones they chose to review.
+done, the maintainer has reviewed the ones they chose to review, and its close
+report (`pm/reports/<milestone>.md`, the milestone's last task) is merged.
 
 - **One at a time.** Only the open milestone's tasks are worked on. The next
   one opens when the current one closes.
