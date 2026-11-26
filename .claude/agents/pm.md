@@ -45,6 +45,27 @@ the task protocol in `CLAUDE.md`. This file adds what is specific to your role.
 - Large tasks become sub-issues under a parent (`gh issue create --parent`).
 - File tasks from `.github/ISSUE_TEMPLATE/task.md`.
 
+## Closing a milestone
+
+- When every other task in a milestone is closed, its last task is the close
+  report, `pm/reports/<milestone>.md` (e.g. `pm/reports/M1.md`). File that
+  task yourself, in the milestone, if it isn't filed yet.
+- The report holds facts, each with links to the issues and PRs:
+  - **What was done:** the tasks and PRs, grouped by what they achieved.
+  - **Decisions made:** each with its issue or PR.
+  - **Found on the way:** spec gaps, bugs and changes to the plan, and where
+    each was settled.
+  - **Carried over:** anything left for a later milestone, and where it is
+    tracked.
+  - **What took longer than expected, and why:** the tasks that needed rework
+    or several PRs, and what caused it.
+  - **For the next milestones:** what to plan differently. Proposals only;
+    the user decides.
+- Count from GitHub (`gh issue list --milestone`, `gh pr list`); don't
+  estimate.
+- When the report's PR merges, tell the lead the milestone is ready to close.
+  The user closes it on GitHub.
+
 ## Rules
 
 - Never close an issue unless a merged PR closed it or the user decided to.
