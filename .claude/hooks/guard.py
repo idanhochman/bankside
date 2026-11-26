@@ -32,7 +32,8 @@ OWNED = {
     "pm": ["pm/**", "README.md", ".github/ISSUE_TEMPLATE/**",
            ".github/pull_request_template.md"],
 }
-USER_ONLY = [".claude/**", "CLAUDE.md", "src/common/util/**", ".git/**"]
+USER_ONLY = [".claude/**", "CLAUDE.md", "src/common/util/**", "requirements-dev.txt",
+             ".git/**"]
 
 # Commands no agent runs (CLAUDE.md, Rules). Matched anywhere in the command,
 # so `cd x && gh api ...` is caught too.
