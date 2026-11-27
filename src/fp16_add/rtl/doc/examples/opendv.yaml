@@ -1,0 +1,10 @@
+# The designer's toy examples for fp16_add: a demonstration for the review
+# pages in ../, not verification (DV's tests are in src/fp16_add/dv/).
+# Its own project, so opendv never mixes these with DV's tests.
+version: 1
+project: fp16_add_examples
+targets: [toy]
+defaults:
+  sim:
+    build_args: [--x-initial, unique]
+    plusargs: [+verilator+rand+reset+2]
