@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+# Tests dirty_files in a scratch repo. Run it after changing dirty_files:
+#   .claude/skills/synth/scripts/test_dirty_files
+set -euo pipefail
+HERE="$(cd "$(dirname "$(readlink -f "$0")")" && pwd -P)"
+T="$(mktemp -d)"
+trap 'rm -rf "$T"' EXIT
+fails=0
+check() {  # check <what> <expect: clean|dirty>
+    local got=clean
+    [ -n "$("$HERE/dirty_files" "$T" m)" ] && got=dirty
+    if [ "$got" = "$2" ]; then echo "ok    $1: $got"; else echo "FAIL  $1: $got, expected $2"; fails=1; fi
+}
+git -C "$T" init -q
+mkdir -p "$T/src/m/rtl" "$T/src/m/syn" "$T/src/n/rtl" "$T/src/m/doc" "$T/.claude/skills/synth"
+echo a > "$T/src/m/rtl/m.sv"; echo b > "$T/src/n/rtl/n.sv"; echo c > "$T/src/m/syn/README.md"
+echo d > "$T/.claude/skills/synth/x"
+git -C "$T" add -A && git -C "$T" -c user.email=t@t -c user.name=t commit -qm init
+
+check "all committed" clean
+echo x >> "$T/src/m/rtl/m.sv";        check "modified RTL of this module" dirty;  git -C "$T" checkout -q -- .
+echo x > "$T/src/m/rtl/new.sv";       check "untracked RTL of this module" dirty; rm "$T/src/m/rtl/new.sv"
+mkdir -p "$T/src/m/rtl/sub"; echo x > "$T/src/m/rtl/sub/deep.sv"
+                                      check "untracked RTL in a subfolder" dirty; rm -r "$T/src/m/rtl/sub"
+echo x >> "$T/src/n/rtl/n.sv";        check "modified RTL of another module" dirty; git -C "$T" checkout -q -- .
+echo x >> "$T/src/m/syn/README.md";   check "modified syn/ file" dirty;           git -C "$T" checkout -q -- .
+echo x > "$T/src/m/syn/orfs.mk";      check "untracked syn/orfs.mk" dirty;        rm "$T/src/m/syn/orfs.mk"
+echo x >> "$T/.claude/skills/synth/x"; check "modified synth skill" dirty;        git -C "$T" checkout -q -- .
+echo x > "$T/src/m/syn/ppa.yaml";     check "only ppa.yaml (the run's own output)" clean; rm "$T/src/m/syn/ppa.yaml"
+echo x >> "$T/src/m/doc/spec.md";     check "an unrelated file (the spec)" clean; rm "$T/src/m/doc/spec.md"
+exit $fails
