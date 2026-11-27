@@ -27,7 +27,9 @@
       "Bash(src/common/util/opendv *)",
       "Bash(./src/common/util/opendv *)",
       "Bash(.claude/skills/waves/scripts/waves *)",
-      "Bash(./.claude/skills/waves/scripts/waves *)"
+      "Bash(./.claude/skills/waves/scripts/waves *)",
+      "Bash(.claude/skills/synth/scripts/synth *)",
+      "Bash(./.claude/skills/synth/scripts/synth *)"
     ],
     "deny": [
       "Bash(gh api *)",

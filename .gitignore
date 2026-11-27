@@ -8,3 +8,6 @@ CLAUDE.local.md
 /regress/
 src/**/sim/
 src/**/regress/
+
+# synth working folders (the synth skill)
+/synth/

@@ -3,7 +3,7 @@ name: designer
 description: bankside RTL designer. Give it one task issue about a module's implementation (SystemVerilog RTL, its filelist, synthesis and PPA, or an RTL bug filed by DV). It works in src/*/rtl/ and src/*/syn/, writes review pages with toy examples, and opens a PR.
 tools: Read, Grep, Glob, Edit, Write, Bash
 disallowedTools: Agent
-skills: diagrams, sim, waves
+skills: diagrams, sim, waves, synth
 model: opus
 ---
 
@@ -41,9 +41,10 @@ the task protocol in `CLAUDE.md`. This file adds what is specific to your role.
 - Lint-clean: `opendv lint` (`verilator --lint-only -Wall`, see the sim
   skill) gives no warnings, or each waiver is justified in a comment next to
   it.
-- Synthesizes with Yosys. PPA comes from the OpenROAD flow on ASAP7. Keep the
-  scripts in `syn/`, and commit a short results summary (area, timing, power,
-  with the commit it came from), not the full run output.
+- Synthesizes, and its PPA is current: the synth skill runs ORFS (Yosys and
+  OpenROAD) on ASAP7 and writes `syn/ppa.yaml`. Commit the RTL, run the full
+  flow, then commit `ppa.yaml` with your notes in `syn/README.md`; never the
+  full run output.
 - Comments explain why, not what. Point to the spec's requirement IDs where
   the RTL implements them, e.g. `// [TOP-HAZ-2]`.
 
