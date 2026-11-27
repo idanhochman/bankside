@@ -45,6 +45,16 @@ cycle  time(ns)  valid_in       a       b  valid_out  result
   signal's value **just before the edge**: what a flip-flop samples there.
   Cycle numbers count rising edges from the start of the run, so they are the
   same whatever window you ask for.
+- **No clock** (a combinational unit such as `fp16_mul`, whose dump has no
+  `clk`; or `--clock none`): one row per time at which any listed signal
+  changes, with the values once that time has settled. Each row is then one
+  stimulus and its result:
+
+  ```
+  time(ns)       a       b       p
+        10  0x7C01  0x3C00  0x7E00
+        20  0xFE00  0x0000  0x7E00
+  ```
 - Buses are hex (`0x3C00`), bits `0`/`1`; `x` or `z` means some bit is.
 - A signal is named by its full path from `waves list`, or by any ending of it
   that is unique (`result`, `u_round.result`). `waves list` skips cocotb's
@@ -81,6 +91,8 @@ src/common/util/opendv run fp16_mul:test_ties --seed 2147
 .claude/skills/waves/scripts/waves png src/fp16_mul/dv/doc/img/ties.waves.yaml
 ```
 
+The image is a PNG: it is GTKWave's own window, a picture, so it can't be an
+SVG (the "SVG where the tool allows" rule in `CLAUDE.md` doesn't apply).
 Then **open the PNG with Read and look at it** before you use it: the window
 shows what the caption claims, the markers sit on the events, nothing is cut
 off. Fix the spec and draw again until it does.

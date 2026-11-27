@@ -128,7 +128,23 @@ works only because registers start at zero fails here, as it should.
     toy/tests/example_<scenario>.py
   ```
 
-  Run them from `toy/`: `../../../../../common/util/opendv run example_hazard`.
+  It is a separate project, which changes a few things:
+  - **Run it from `toy/`**, where a bare test name works:
+    `../../../../../common/util/opendv run example_hazard --seed 1`. The root
+    project doesn't list it, so it can't be named from the repo root.
+  - **The target is `<module>_examples`** (the `name:` in `toy/opendv.yaml`),
+    not `toy` (its folder): `opendv targets` and `rerun:` lines say
+    `fp16_mul_examples:example_hazard`.
+  - **Results go to the project's own `sim/`**:
+    `src/<module>/rtl/doc/examples/sim/<module>_examples/<test>/build_1/`
+    (git-ignored like the root one).
+  - **The printed `rerun:` line works only from `toy/`.** On a review page or
+    in a `.waves.yaml` `run:` line, write the whole command from the repo root:
+    `cd src/<module>/rtl/doc/examples/toy && ../../../../../common/util/opendv run example_hazard --seed 1`.
+  - Copy the root project's `defaults.sim` (power-up values) into this
+    project's `opendv.yaml`, so the examples start from power-up like the
+    real tests.
+
   The `dump.fst` is your review page's waveform.
 - You may run DV's tests to reproduce a bug DV filed: paste its repro
   command. Running a test doesn't need you to read it; reading it follows the
