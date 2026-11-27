@@ -508,18 +508,16 @@ Code coverage (line, branch, toggle) is collected through opendv as well.
   ([reference model](#reference-model)), and the VER-1 comparison stops
   there.
 
-  **Known opendv gap.** opendv at `a30684a` can't do this today. Its
-  simulator call (`opendv/simulator.py`) runs cocotb's `runner.test()`
-  without `plusargs`, and its yaml has only `sim.build_args`, so no run-time
-  plusarg reaches the simulator. Its seed reaches cocotb (as
-  `COCOTB_RANDOM_SEED`), but not Verilator as `+verilator+seed`: cocotb
-  2.1.0's Verilator runner doesn't turn the seed into a plusarg. So every
-  opendv run uses Verilator's run-time default, and unwritten entries read as
-  0. The fix belongs in opendv, and the user has been told; bankside does not
-  work around it (no build-time substitute, no `initial` values, no wrapper
-  script around opendv). Until it is fixed, VER-15 and the power-up test are
-  unverified, and a test can pass with a missing load that random power-up
-  values would catch.
+  **opendv support.** From opendv 0.1.0 on, the yaml's `sim.plusargs`
+  reach the simulator and the run's seed reaches Verilator, as confirmed by
+  the maintainer. bankside pins 0.1.2. The root `opendv.yaml` sets
+  `--x-initial unique` and `+verilator+rand+reset+2` for every target, and
+  opendv passes the seed itself. A DV check at 0.1.2 (#73, a throwaway
+  stub with a 32-bit register never written, read at 1 ns with no clock
+  edge) read 0xd8c18446 with seed 1, 0xa4241329 with seed 2, and 0xd8c18446
+  again with seed 1. So the value isn't 0, it changes with the seed, and it
+  repeats on a replay. The power-up test itself is still to be written (M3
+  and later), so VER-15 is not yet verified on bankside RTL.
 
 ## Structure
 
@@ -576,7 +574,7 @@ the model implements; it is listed only where it is the main check.
 | [TOP-ARCH-6] | bank address from the trigger | VER-14 |
 | [TOP-ARCH-7] | at most one bank operand | VER-5, VER-8 |
 | [TOP-ARCH-8] | bank writes in S5, to the store's own trigger | VER-14 |
-| [TOP-ARCH-9] | power-up value of an entry never written | VER-15 (blocked by the opendv gap); the model's written flags ([reference model](#reference-model)) |
+| [TOP-ARCH-9] | power-up value of an entry never written | VER-15; the model's written flags ([reference model](#reference-model)) |
 | [TOP-ARCH-10] | read ports: GRF_B 3, the others 1 or 2 | VER-6 (three GRF_B reads in one cycle), VER-7 (the CRF's 2: a zero-slot JUMP reads the JUMP and the word it leads to in one cycle) |
 | [TOP-PIPE-1] | five stages, every write in S5, in program order | VER-1, VER-6 |
 | [TOP-PIPE-2] | bubbles without triggers | VER-6, random bubbles in [Stimulus](#stimulus) |
