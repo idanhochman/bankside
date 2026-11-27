@@ -6,4 +6,4 @@ the commit and the command that produced it.
 
 | Page | Shows |
 |---|---|
-| [fp16_mul.md](fp16_mul.md) | The datapath, lint, and toy examples for every worked case of the spec: exact products, ties, subnormals, overflow, zero × Inf, NaN; a NumPy sanity sweep; the quick synthesis numbers |
+| [fp16_mul.md](fp16_mul.md) | The datapath, lint, and toy examples for every worked case of the spec: exact products, ties, subnormals, overflow, zero × Inf, NaN; a NumPy sanity sweep; the full-flow PPA |
