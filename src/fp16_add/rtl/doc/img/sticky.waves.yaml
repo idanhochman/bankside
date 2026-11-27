@@ -1,0 +1,21 @@
+# Waveform for ../fp16_add.md. Owner: designer.
+dump: src/fp16_add/rtl/doc/examples/sim/fp16_add_examples/example_sticky/build_1/dump.fst
+run: cd src/fp16_add/rtl/doc/examples/toy && ../../../../../common/util/opendv run example_sticky --seed 1
+signals:
+  - a
+  - b
+  - s
+  - d
+  - ya
+  - guard
+  - sticky
+  - inc
+from: 0ns
+to: 60ns
+markers:
+  - {at: 10ns, label: "#6"}
+  - {at: 20ns, label: "#7"}
+  - {at: 30ns, label: "#12"}
+  - {at: 40ns, label: "#20"}
+  - {at: 50ns, label: "#21"}
+width: 1400

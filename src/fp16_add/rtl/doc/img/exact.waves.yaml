@@ -1,0 +1,20 @@
+# Waveform for ../fp16_add.md. Owner: designer.
+dump: src/fp16_add/rtl/doc/examples/sim/fp16_add_examples/example_exact/build_1/dump.fst
+run: cd src/fp16_add/rtl/doc/examples/toy && ../../../../../common/util/opendv run example_exact --seed 1
+signals:
+  - a
+  - b
+  - s
+  - swap
+  - sum
+  - lsh
+  - fn
+from: 0ns
+to: 60ns
+markers:
+  - {at: 10ns, label: "#1"}
+  - {at: 20ns, label: "#2"}
+  - {at: 30ns, label: "#3"}
+  - {at: 40ns, label: "#13"}
+  - {at: 50ns, label: "#14"}
+width: 1400
