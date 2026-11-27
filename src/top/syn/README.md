@@ -1,5 +1,7 @@
 # top: synthesis
 
-Owner: designer. Synthesis scripts (Yosys, OpenROAD on ASAP7) and a short
-PPA summary (area, timing, power, and the commit it came from). Full run
+Owner: designer. `ppa.yaml` is the last full synthesis run (ORFS on ASAP7,
+written by the synth skill's tool), and this file says what its numbers mean
+and what they compare against. A `constraint.sdc` or `orfs.mk` here overrides
+the common ones, only when this module needs it (say why below). Full run
 output is not committed.

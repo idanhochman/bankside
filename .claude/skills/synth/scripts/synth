@@ -1,0 +1,73 @@
+#!/usr/bin/env bash
+# The synth tool (see ../SKILL.md): synthesizes one module with ORFS on ASAP7,
+# in ORFS's published image, pinned by digest. The repo is mounted read-only;
+# the flow works in synth/<module>/ (git-ignored). After a full run at the
+# spec clock, syn/ppa.yaml is copied into the module.
+#
+#   synth <module> [--quick] [--clock-ps N]
+set -euo pipefail
+
+ORFS_TAG=26Q4-615-g8ba54e723
+ORFS_IMAGE="openroad/orfs:$ORFS_TAG@sha256:b7be8a1b7be792eface91b4df4a737bee93ec15136a77a03ed0bdf1416905510"
+
+HERE="$(cd "$(dirname "$(readlink -f "$0")")" && pwd -P)"
+REPO="$(cd "$HERE/../../../.." && pwd -P)"
+
+here="$(pwd -P)"
+case "$here/" in
+    "$REPO"/*) ;;
+    *) echo "synth: run it from inside the bankside repo ($REPO), not $here" >&2
+       exit 2 ;;
+esac
+
+module=""
+full=1
+spec_clock=1
+for a in "$@"; do
+    case "$a" in
+        --quick) full=0 ;;
+        --clock-ps|--clock-ps=*) spec_clock=0 ;;
+        -h|--help) ;;
+        -*) ;;
+        *) [ -z "$module" ] && module="$a" ;;
+    esac
+done
+if [ -z "$module" ] && [[ " $* " != *" -h "* && " $* " != *" --help "* ]]; then
+    echo "usage: synth <module> [--quick] [--clock-ps N]" >&2
+    exit 2
+fi
+if [ -n "$module" ] && ! [[ "$module" =~ ^[a-z][a-z0-9_]*$ && -d "$REPO/src/$module" ]]; then
+    echo "synth: no module src/$module" >&2
+    exit 2
+fi
+
+if ! docker image inspect "$ORFS_IMAGE" >/dev/null 2>&1; then
+    echo "synth: pulling ORFS $ORFS_TAG (first use; 6.8 GB, several minutes)..." >&2
+    docker pull -q "$ORFS_IMAGE" >/dev/null
+fi
+
+# Where the numbers come from: the commit, and whether the RTL, this module's
+# syn/ or this skill had uncommitted changes (a PPA number must be reproducible).
+commit="$(git -C "$REPO" rev-parse --short HEAD)"
+dirty="$(git -C "$REPO" status --porcelain -- 'src/*/rtl' "src/${module:-.}/syn" .claude/skills/synth \
+         | grep -v "src/${module:-.}/syn/ppa.yaml" || true)"
+clean=1
+[ -n "$dirty" ] && clean=0
+
+work="$REPO/synth/${module:-_help}"
+mkdir -p "$work"
+
+docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp \
+    -e BANKSIDE_REPO="$REPO" -e BANKSIDE_COMMIT="$commit" -e BANKSIDE_CLEAN="$clean" \
+    -e BANKSIDE_ORFS="$ORFS_TAG" -e BANKSIDE_WORK="$work" \
+    -v "$REPO:$REPO:ro" -v "$work:/work" -w /work \
+    "$ORFS_IMAGE" python3 "$HERE/synth.py" "$@"
+
+if [ "$full" = 1 ] && [ "$spec_clock" = 1 ] && [ -f "$work/ppa.yaml" ] && [ -n "$module" ]; then
+    cp "$work/ppa.yaml" "$REPO/src/$module/syn/ppa.yaml"
+    echo "wrote src/$module/syn/ppa.yaml"
+    if [ "$clean" = 0 ]; then
+        echo "synth: WARNING: the RTL or syn/ had uncommitted changes (clean: false)." >&2
+        echo "       Commit them and run again before quoting these numbers in a PR." >&2
+    fi
+fi
