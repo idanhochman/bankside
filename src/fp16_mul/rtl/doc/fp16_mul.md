@@ -6,8 +6,9 @@ Owner: designer. This page shows, with toy examples, that the RTL in
 says. It is a demonstration, not verification: DV's tests in
 `src/fp16_mul/dv/` are the check.
 
-- **RTL commit:** `e844553`. Every result, waveform and number below comes
-  from that commit.
+- **RTL commit:** `e844553`. Every result and waveform below comes from that
+  commit. The full-flow PPA comes from `83ea73a`, which has the same RTL
+  (see [Synthesis](#synthesis)).
 - **Expected values:** the `p` column of the spec's
   [worked cases](../../doc/README.md#worked-cases). The harness reads that
   table from the spec file itself (`examples/toy/env/fmul_toy.py`), so an
@@ -294,20 +295,33 @@ is DV's.
 
 ## Synthesis
 
-The quick run (synthesis only, no placement) at `e844553`, ASAP7, ORFS
-`26Q4-615-g8ba54e723`, 3333 ps:
+The full flow (placement, clock tree, routing, finish), ORFS
+`26Q4-615-g8ba54e723`, ASAP7, 3333 ps, from
+[`syn/ppa.yaml`](../../syn/ppa.yaml) at commit `83ea73a` (`clean: true`). The
+RTL is unchanged since `e844553`, the commit the examples above ran on.
 
-| Measure | Value |
-|---|---|
-| Area | 147.3 µm² |
-| Cells | 1451 |
-| Delay | 1018.4 ps |
+```
+.claude/skills/synth/scripts/synth fp16_mul
+```
 
-The delay comes before placement, so it has no wire delays. The full flow and
-`syn/ppa.yaml` are task #72. [FMUL-11] sets no budget of its own beyond the
-3333 ps period, and the multiplier is not on the accumulator loop. So
-1018 ps leaves room for [DP-17]'s S3 path, which is checked when
-`pcu_datapath` is synthesized.
+| Measure | Full flow (`ppa.yaml`) | Quick run at `e844553`, no wires |
+|---|---|---|
+| Area | 149.2 µm² (placed and routed) | 147.3 µm² |
+| Cells | 1561 (48 timing buffers) | 1451 |
+| Delay, `a`/`b` → `p` | 1238.8 ps | 1018.4 ps |
+| DRC violations | 0 | n/a |
+
+The full-flow numbers are the ones to quote; the quick run is kept only to
+show what placement and routing add (220 ps of wire and buffer delay). The
+worst path runs `b[14]` → hidden bit → significand multiplier → `lz` → shift
+→ `inc` → `p[8]`, the datapath of Figure 1 in series. Power (0.128 mW) is
+OpenSTA's default-activity guess, an indication only.
+
+[FMUL-11] sets no budget of its own beyond the 3333 ps period, and the
+multiplier is not on the accumulator loop. So 1239 ps (37% of the period)
+leaves 2094 ps for the rest of [DP-17]'s S3 path, the register around it and
+the choice of *x*; that path is checked when `pcu_datapath` is synthesized.
+The details are in [`syn/README.md`](../../syn/README.md).
 
 [FMUL-1]: ../../doc/README.md#ports
 [FMUL-3]: ../../doc/README.md#behaviour

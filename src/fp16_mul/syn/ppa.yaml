@@ -1,0 +1,30 @@
+# Written by .claude/skills/synth/scripts/synth. Don't edit.
+# power_mw.activity default: OpenSTA's guess (inputs toggle on 10% of cycles), not a simulation.
+module: fp16_mul
+toplevel: fp16_mul
+flow: full
+commit: 83ea73a
+clean: true
+orfs: 26Q4-615-g8ba54e723
+platform: asap7
+kind: combinational
+clock_ps: 3333
+constraint: common
+settings: common
+area_um2:
+  cells_after_synth: 147.3
+  cells: 149.2
+  die: 448.9
+cells:
+  after_synth: 1451
+  total: 1561
+  flops: 0
+  timing_buffers: 48
+timing:
+  setup_slack_ps: 2094.2
+  delay_ps: 1238.8
+power_mw:
+  total: 0.128
+  activity: default
+drc_violations: 0
+runtime_s: 461
