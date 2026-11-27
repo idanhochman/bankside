@@ -1,0 +1,8 @@
+version: 1
+name: fp16_add_examples
+toplevel: fp16_add
+rtl:
+  filelist: ../../../fp16_add.f
+dv:
+  dir: .
+  tests: ['example_*']

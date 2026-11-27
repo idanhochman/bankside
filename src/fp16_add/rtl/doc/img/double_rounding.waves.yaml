@@ -1,0 +1,20 @@
+# Waveform for ../fp16_add.md. Owner: designer.
+dump: src/fp16_add/rtl/doc/examples/sim/fp16_add_examples/example_double_rounding/build_1/dump.fst
+run: cd src/fp16_add/rtl/doc/examples/toy && ../../../../../common/util/opendv run example_double_rounding --seed 1
+signals:
+  - a
+  - b
+  - s
+  - guard
+  - sticky
+  - inc
+from: 0ns
+to: 70ns
+markers:
+  - {at: 10ns, label: "D1"}
+  - {at: 20ns, label: "D2"}
+  - {at: 30ns, label: "D3"}
+  - {at: 40ns, label: "D4"}
+  - {at: 50ns, label: "D5"}
+  - {at: 60ns, label: "D6"}
+width: 1400

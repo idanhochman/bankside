@@ -1,0 +1,19 @@
+# Waveform for ../fp16_add.md. Owner: designer.
+dump: src/fp16_add/rtl/doc/examples/sim/fp16_add_examples/example_subnormals/build_1/dump.fst
+run: cd src/fp16_add/rtl/doc/examples/toy && ../../../../../common/util/opendv run example_subnormals --seed 1
+signals:
+  - a
+  - b
+  - s
+  - sum
+  - lsh
+  - fn
+from: 0ns
+to: 60ns
+markers:
+  - {at: 10ns, label: "#22"}
+  - {at: 20ns, label: "#23"}
+  - {at: 30ns, label: "#24"}
+  - {at: 40ns, label: "#25"}
+  - {at: 50ns, label: "#26"}
+width: 1400

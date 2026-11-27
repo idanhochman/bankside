@@ -1,0 +1,35 @@
+digraph fp16_add_datapath {
+  graph [rankdir=LR, fontname="Helvetica", fontsize=11, nodesep=0.35, ranksep=0.45,
+         newrank=true, labeljust=l];
+  node  [shape=box, margin="0.15,0.08", fontname="Helvetica", fontsize=10, height=0.3];
+  edge  [fontname="Helvetica", fontsize=9, arrowsize=0.7];
+
+  a [shape=plaintext, label="a"];
+  b [shape=plaintext, label="b"];
+  s [shape=plaintext, label="s"];
+
+  unpack [label="unpack, classify\n[FADD-4]\nma, mb, fea, feb"];
+  order  [label="order\nswap = b[14:0] > a[14:0]\nd = Fx − Fy, sub"];
+  align  [label="align\nya = (my·8) >> min(d, 14)\nlost bits → sticky"];
+  addsub [label="add / subtract\nsum = xa ± ya\n15 bits, ≥ 0"];
+  lzc    [label="leading-zero\ncount → lz"];
+  norm   [label="normalise\ncarry: right 1, fn = fx + 1\nelse: left lsh = min(lz, fx − 1)"];
+  rnd    [label="round [FADD-7]\ninc = guard & (sticky \| n[0])\nmag = (fn − 1)·1024 + n + inc"];
+  mux    [label="result mux [FADD-5]\nNaN, Inf − Inf → 0x7E00 [FADD-8]\nInf → that operand\n0 + 0, sum = 0 → ±0 [FADD-6]\nmag ≥ 0x7C00 → ±Inf"];
+
+  a -> unpack [label="16"];
+  b -> unpack [label="16"];
+  unpack -> order [label="11, 5"];
+  order -> align [label="my, d"];
+  order -> addsub [label="xa = mx·8, sub", style=dashed];
+  align -> addsub [label="ya 14"];
+  addsub -> lzc [label="15"];
+  addsub -> norm [label="sum 15"];
+  lzc -> norm [label="lz 4", style=dashed];
+  norm -> rnd [label="norm 14, fn 5"];
+  rnd -> mux [label="mag 16"];
+  order -> mux [label="sign_x", style=dashed];
+  unpack -> mux [label="classes", style=dashed];
+  addsub -> mux [label="sum = 0", style=dashed];
+  mux -> s [label="16"];
+}

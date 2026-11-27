@@ -1,0 +1,19 @@
+# Waveform for ../fp16_add.md. Owner: designer.
+dump: src/fp16_add/rtl/doc/examples/sim/fp16_add_examples/example_overflow/build_1/dump.fst
+run: cd src/fp16_add/rtl/doc/examples/toy && ../../../../../common/util/opendv run example_overflow --seed 1
+signals:
+  - a
+  - b
+  - s
+  - fn
+  - mag
+  - ovf
+from: 0ns
+to: 60ns
+markers:
+  - {at: 10ns, label: "#15"}
+  - {at: 20ns, label: "#16"}
+  - {at: 30ns, label: "#17"}
+  - {at: 40ns, label: "#18"}
+  - {at: 50ns, label: "#19"}
+width: 1400
