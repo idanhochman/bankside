@@ -17,7 +17,7 @@
 # target you are standing in.
 set -euo pipefail
 
-OPENDV_VERSION=0.1.1
+OPENDV_VERSION=0.1.2
 IMAGE="${OPENDV_IMAGE:-ghcr.io/idanhochman/opendv:$OPENDV_VERSION}"
 REPO="$(cd "$(dirname "$(readlink -f "$0")")/../../.." && pwd -P)"
 
