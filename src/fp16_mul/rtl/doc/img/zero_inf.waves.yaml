@@ -1,0 +1,20 @@
+# Waveform for ../fp16_mul.md. Owner: designer.
+dump: src/fp16_mul/rtl/doc/examples/sim/fp16_mul_examples/example_zero_inf/build_1/dump.fst
+run: cd src/fp16_mul/rtl/doc/examples/toy && ../../../../../common/util/opendv run example_zero_inf --seed 1
+signals:
+  - a
+  - b
+  - p
+from: 0ns
+to: 100ns
+markers:
+  - {at: 10ns, label: "#30"}
+  - {at: 20ns, label: "#31"}
+  - {at: 30ns, label: "#32"}
+  - {at: 40ns, label: "#33"}
+  - {at: 50ns, label: "#34"}
+  - {at: 60ns, label: "#35"}
+  - {at: 70ns, label: "#36"}
+  - {at: 80ns, label: "#37"}
+  - {at: 90ns, label: "#38"}
+width: 1400
