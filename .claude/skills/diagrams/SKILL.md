@@ -12,8 +12,9 @@ file next to the prose it illustrates has none of those problems.
 
 Two words, used consistently: a **timing diagram** is drawn by hand and shows
 how something *should* behave (this skill). A **waveform** comes from a
-simulation and shows how the RTL *did* behave (the `waves` skill). Both render
-through WaveDrom, so they look alike and can sit side by side on a review page.
+simulation and shows how the RTL *did* behave (the `waves` skill, which draws
+it with GTKWave). A review page can put the two side by side: the timing
+diagram the spec promises, and the waveform of what the RTL did.
 
 ## Which format
 

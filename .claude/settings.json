@@ -25,7 +25,9 @@
       "Bash(git pull *)",
       "Bash(git push -u origin *)",
       "Bash(src/common/util/opendv *)",
-      "Bash(./src/common/util/opendv *)"
+      "Bash(./src/common/util/opendv *)",
+      "Bash(.claude/skills/waves/scripts/waves *)",
+      "Bash(./.claude/skills/waves/scripts/waves *)"
     ],
     "deny": [
       "Bash(gh api *)",
