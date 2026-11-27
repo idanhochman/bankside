@@ -1,0 +1,26 @@
+# The bankside opendv project. Owner: DV.
+# Every module under src/ is a target from the moment it exists, so every role
+# can lint, run and regress it (see .claude/skills/sim/SKILL.md). Each target's
+# own settings are in src/<module>/opendv.yaml.
+version: 1
+project: bankside
+
+targets:
+  - src/common
+  - src/fp16_mul
+  - src/fp16_add
+  - src/pcu_ctrl
+  - src/pcu_datapath
+  - src/pcu_decode
+  - src/pcu_regfile
+  - src/top
+
+defaults:
+  seeds: 8                 # random seeds per test in a regression
+  waves: false             # FST dumps in regress (run always dumps)
+  code_cov: false
+  sim:
+    # [TOP-ARCH-9], VER-15 (src/top/dv/README.md): an entry never written
+    # holds a power-up value drawn from the run's seed, never 0 by default.
+    build_args: [--x-initial, unique]       # build: random-capable initial values
+    plusargs: [+verilator+rand+reset+2]     # run: randomise them from the seed
