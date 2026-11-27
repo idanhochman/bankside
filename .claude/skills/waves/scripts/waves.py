@@ -2,7 +2,7 @@
 for review pages. Runs inside the waves image; call it through ./waves.
 
   waves list  DUMP                                  the signals in a dump
-  waves table DUMP --signals a,b [--clock clk] [--from T] [--to T]
+  waves table DUMP --signals a,b [--clock clk|none] [--from T] [--to T]
   waves png   SPEC.waves.yaml...                    write SPEC.png next to each spec
   waves png   --check PATH...                       every *.waves.yaml under PATH:
                                                     its PNG exists and matches
@@ -124,7 +124,9 @@ def cmd_list(a) -> int:
 
 def cmd_table(a) -> int:
     d = Dump(Path(a.dump))
-    clock = d.resolve(a.clock)
+    if a.clock == "none" or (a.clock is None and not any(n == "clk" or n.endswith(".clk") for n in d.signals)):
+        return table_by_change(a, d)
+    clock = d.resolve(a.clock or "clk")
     names = [d.resolve(n.strip()) for n in a.signals.split(",") if n.strip()]
     start = seconds(a.start) if a.start else Fraction(0)
     end = seconds(a.end) if a.end else None
@@ -164,6 +166,45 @@ def cmd_table(a) -> int:
         print("  ".join(x.rjust(w) for x, w in zip(r, widths)))
     if not body:
         print("(no rising edge of the clock in that window)")
+    return 0
+
+
+def table_by_change(a, d: Dump) -> int:
+    """No clock (a combinational module): one row per time at which any listed
+    signal changes, with the values once that time has settled."""
+    names = [d.resolve(n.strip()) for n in a.signals.split(",") if n.strip()]
+    start = seconds(a.start) if a.start else Fraction(0)
+    end = seconds(a.end) if a.end else None
+    ids = {d.signals[n][0] for n in names}
+    now: dict[str, str] = {}
+    rows, t_cur, changed = [], None, False
+
+    def emit():
+        if t_cur is not None and changed and t_cur >= start:
+            rows.append((t_cur, [now.get(d.signals[n][0], "x") for n in names]))
+
+    for t, ident, value in d.changes(ids):
+        if t != t_cur:
+            emit()
+            t_cur, changed = t, False
+            if end is not None and t > end:
+                t_cur = None
+                break
+        changed |= now.get(ident) != value
+        now[ident] = value
+    emit()
+    d.close()
+
+    unit = "ns"
+    head = [f"time({unit})", *[n.rsplit(".", 1)[1] for n in names]]
+    body = [[f"{float(t / UNITS[unit]):g}", *[show(v, d.signals[n][1]) for v, n in zip(vals, names)]]
+            for t, vals in rows]
+    widths = [max(len(r[i]) for r in [head, *body]) for i in range(len(head))]
+    print(f"# {d.path}: {', '.join(names)}, one row per change (no clock), values once that time settled")
+    for r in [head, *body]:
+        print("  ".join(x.rjust(w) for x, w in zip(r, widths)))
+    if not body:
+        print("(no change of these signals in that window)")
     return 0
 
 
@@ -294,7 +335,8 @@ def main(argv=None) -> int:
     t = sub.add_parser("table", help="signal values at each clock edge, as text")
     t.add_argument("dump")
     t.add_argument("--signals", required=True, help="comma-separated names (a unique ending of the path is enough)")
-    t.add_argument("--clock", default="clk")
+    t.add_argument("--clock", help="the clock to sample on (default clk); 'none', or a dump without clk: "
+                   "a row at each change instead")
     t.add_argument("--from", dest="start", help="first time, e.g. 50ns (default: the start)")
     t.add_argument("--to", dest="end", help="last time (default: the end)")
     t.set_defaults(fn=cmd_table)
