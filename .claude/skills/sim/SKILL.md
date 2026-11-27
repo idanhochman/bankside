@@ -31,8 +31,11 @@ options.
 - A target is named by its folder name: `fp16_mul`, `fp16_mul:test_ties`.
   Standing inside `src/fp16_mul/`, a bare test name or no name means that
   target.
-- Until a module has tests, `lint` checks it, `regress` skips it and `run`
-  says it has none.
+- Until a module has RTL (its filelist names no file), `lint --all` skips it
+  with a note, and `lint <module>` says "no RTL yet". Until it has tests,
+  `lint` checks it, `regress` skips it and `run` says it has none. `--all`
+  with nothing to do exits 0, so `lint --all` and `regress --all` work as
+  gates from the start; `targets` shows each module's RTL and tests.
 
 ## The four commands
 
