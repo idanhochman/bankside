@@ -1,0 +1,25 @@
+# Waveform for ../fp16_mul.md. Owner: designer.
+dump: src/fp16_mul/rtl/doc/examples/sim/fp16_mul_examples/example_subnormals/build_1/dump.fst
+run: cd src/fp16_mul/rtl/doc/examples/toy && ../../../../../common/util/opendv run example_subnormals --seed 1
+signals:
+  - a
+  - b
+  - p
+from: 0ns
+to: 150ns
+markers:
+  - {at: 10ns, label: "#16"}
+  - {at: 20ns, label: "#17"}
+  - {at: 30ns, label: "#18"}
+  - {at: 40ns, label: "#19"}
+  - {at: 50ns, label: "#20"}
+  - {at: 60ns, label: "#21"}
+  - {at: 70ns, label: "#22"}
+  - {at: 80ns, label: "#23"}
+  - {at: 90ns, label: "#24"}
+  - {at: 100ns, label: "#25"}
+  - {at: 110ns, label: "#26"}
+  - {at: 120ns, label: "#27"}
+  - {at: 130ns, label: "#28"}
+  - {at: 140ns, label: "#29"}
+width: 1400

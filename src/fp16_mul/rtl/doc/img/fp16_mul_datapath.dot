@@ -1,0 +1,34 @@
+digraph fp16_mul_datapath {
+  graph [rankdir=LR, fontname="Helvetica", fontsize=11, nodesep=0.35, ranksep=0.5,
+         newrank=true, labeljust=l];
+  node  [shape=box, margin="0.15,0.08", fontname="Helvetica", fontsize=10, height=0.3];
+  edge  [fontname="Helvetica", fontsize=9, arrowsize=0.7];
+
+  a [shape=plaintext, label="a"];
+  b [shape=plaintext, label="b"];
+  p [shape=plaintext, label="p"];
+
+  unpack [label="unpack, classify\n[FMUL-4]"];
+  mult   [label="ma × mb\n11 × 11 → prod"];
+  lzc    [label="leading-zero\ncount → lz"];
+  expo   [label="be0 = ea_eff + eb_eff − 14\nbe = be0 − lz"];
+  align  [label="align → q\nleft by lsh, or right by rsh\n(right: lost bits → sticky)"];
+  rnd    [label="round [FMUL-7]\ninc = guard & (sticky \| q[11])\nmag_round = mag_trunc + inc"];
+  mux    [label="result mux [FMUL-5]\nNaN → 0x7E00 [FMUL-8]\nInf, zero, ovf → ±Inf, ±0"];
+
+  a -> unpack [label="16"];
+  b -> unpack [label="16"];
+  unpack -> mult [label="ma, mb 11"];
+  unpack -> expo [label="ea_eff, eb_eff 5"];
+  mult -> lzc [label="22"];
+  mult -> align [label="prod 22"];
+  lzc -> expo [label="lz 5"];
+  expo -> align [label="lsh, rsh", style=dashed];
+  expo -> rnd [label="be (normal: exponent field)"];
+  align -> rnd [label="q 22, lost"];
+  rnd -> mux [label="mag_round 15, ovf"];
+  unpack -> mux [label="classes, sign", style=dashed];
+  mux -> p [label="16"];
+
+  { rank=same; mult; expo; }
+}

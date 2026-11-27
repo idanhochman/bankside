@@ -1,0 +1,8 @@
+version: 1
+name: fp16_mul_examples
+toplevel: fp16_mul
+rtl:
+  filelist: ../../../fp16_mul.f
+dv:
+  dir: .
+  tests: ['example_*']

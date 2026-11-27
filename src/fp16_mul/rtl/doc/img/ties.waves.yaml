@@ -1,0 +1,18 @@
+# Waveform for ../fp16_mul.md. Owner: designer.
+dump: src/fp16_mul/rtl/doc/examples/sim/fp16_mul_examples/example_ties/build_1/dump.fst
+run: cd src/fp16_mul/rtl/doc/examples/toy && ../../../../../common/util/opendv run example_ties --seed 1
+signals:
+  - a
+  - b
+  - p
+from: 0ns
+to: 80ns
+markers:
+  - {at: 10ns, label: "#5"}
+  - {at: 20ns, label: "#6"}
+  - {at: 30ns, label: "#11"}
+  - {at: 40ns, label: "#17"}
+  - {at: 50ns, label: "#18"}
+  - {at: 60ns, label: "#21"}
+  - {at: 70ns, label: "#23"}
+width: 1400
