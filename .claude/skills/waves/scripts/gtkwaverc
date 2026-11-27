@@ -1,0 +1,36 @@
+# GTKWave settings for review-page images: light theme, readable fonts, no
+# hierarchy pane. The window size is set by waves.py per image.
+hide_sst 1
+sst_expanded 0
+initial_window_xpos 0
+initial_window_ypos 0
+use_big_fonts 1
+fontname_signals Monospace 12
+fontname_waves Monospace 11
+signal_name_justify 0
+color_back ffffff
+color_grid dddddd
+color_baseline 000000
+color_trans 000000
+color_0 000000
+color_1 000000
+color_low 000000
+color_high 000000
+color_mid 000000
+color_x c00000
+color_xfill f0c0c0
+color_vbox 000000
+color_vtrans 000000
+color_value 000000
+color_timeb ffffff
+color_time 000000
+color_umark 0000ff
+color_mark c00000
+color_dash 888888
+color_white ffffff
+color_black 000000
+color_ltgray eeeeee
+color_normal 000000
+color_mdgray cccccc
+color_dkgray 444444
+color_dkblue 000080

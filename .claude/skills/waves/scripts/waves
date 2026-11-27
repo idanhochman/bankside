@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+# The waves tool (see ../SKILL.md): runs waves.py in its own image, which it
+# builds on first use and tags with a hash of the Dockerfile, so a changed
+# Dockerfile means a fresh build. Like src/common/util/opendv, it runs only
+# inside the bankside repo, mounts the repo, and mounts the user-only paths
+# read-only.
+set -euo pipefail
+
+HERE="$(cd "$(dirname "$(readlink -f "$0")")" && pwd -P)"
+REPO="$(cd "$HERE/../../../.." && pwd -P)"
+IMAGE="bankside-waves:$(sha256sum "$HERE/Dockerfile" | cut -c1-12)"
+
+here="$(pwd -P)"
+case "$here/" in
+    "$REPO"/*) ;;
+    *) echo "waves: run it from inside the bankside repo ($REPO), not $here" >&2
+       exit 2 ;;
+esac
+
+if ! docker image inspect "$IMAGE" >/dev/null 2>&1; then
+    echo "waves: building the image $IMAGE (first use; a few minutes)..." >&2
+    docker build -q -t "$IMAGE" "$HERE" >/dev/null
+fi
+
+ro=()
+for p in .git .claude CLAUDE.md src/common/util requirements-dev.txt; do
+    [ -e "$REPO/$p" ] && ro+=(-v "$REPO/$p:$REPO/$p:ro")
+done
+
+exec docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp -e BANKSIDE_REPO="$REPO" \
+    -v "$REPO:$REPO" "${ro[@]}" -w "$here" "$IMAGE" python3 "$HERE/waves.py" "$@"

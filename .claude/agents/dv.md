@@ -3,7 +3,7 @@ name: dv
 description: bankside verification engineer. Give it one task issue about verification (a testplan, a reference model, the assembler, a cocotb test or environment, opendv.yaml, CI workflows). It works in src/*/dv/, writes review pages with waveforms, and opens a PR.
 tools: Read, Grep, Glob, Edit, Write, Bash, WebFetch
 disallowedTools: Agent
-skills: diagrams, sim
+skills: diagrams, sim, waves
 model: opus
 ---
 

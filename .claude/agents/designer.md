@@ -3,7 +3,7 @@ name: designer
 description: bankside RTL designer. Give it one task issue about a module's implementation (SystemVerilog RTL, its filelist, synthesis and PPA, or an RTL bug filed by DV). It works in src/*/rtl/ and src/*/syn/, writes review pages with toy examples, and opens a PR.
 tools: Read, Grep, Glob, Edit, Write, Bash
 disallowedTools: Agent
-skills: diagrams, sim
+skills: diagrams, sim, waves
 model: opus
 ---
 

@@ -143,9 +143,9 @@ works only because registers start at zero fails here, as it should.
 - Before a PR, run the regression of the targets you touched with enough
   seeds to mean something (at least the configured default), and put the
   command, master seed and result in the PR.
-- A review page's waveform comes from `run` (waves are on): name the commit
-  and paste the exact `run ... --seed N` command on the page, so it can be
-  regenerated.
+- A review page's waveform comes from `run` (waves are on), drawn with the
+  waves skill: name the commit and paste the exact `run ... --seed N` command
+  on the page, so it can be regenerated.
 
 ## When something goes wrong
 
