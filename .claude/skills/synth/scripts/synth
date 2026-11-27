@@ -49,8 +49,8 @@ fi
 # Where the numbers come from: the commit, and whether the RTL, this module's
 # syn/ or this skill had uncommitted changes (a PPA number must be reproducible).
 commit="$(git -C "$REPO" rev-parse --short HEAD)"
-dirty="$(git -C "$REPO" status --porcelain -- 'src/*/rtl' "src/${module:-.}/syn" .claude/skills/synth \
-         | grep -v "src/${module:-.}/syn/ppa.yaml" || true)"
+dirty=""
+[ -n "$module" ] && dirty="$("$HERE/dirty_files" "$REPO" "$module")"
 clean=1
 [ -n "$dirty" ] && clean=0
 

@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+# Prints the uncommitted changes that make a synthesis result unreproducible:
+# any module's RTL (a module may include another's files), this module's syn/
+# (except ppa.yaml, which the run itself writes) and the synth skill. Prints
+# nothing when all of them are committed. Tested by test_dirty_files.
+#
+#   dirty_files <repo> <module>
+#
+# The RTL pathspec must be a :(glob) magic one: a plain 'src/*/rtl' matches no
+# file below rtl/ (git 2.43), which once marked dirty RTL as clean.
+set -euo pipefail
+repo="$1"
+module="$2"
+git -C "$repo" status --porcelain --untracked-files=all -- \
+    ':(glob)src/*/rtl/**' "src/$module/syn" .claude/skills/synth \
+    | grep -v " src/$module/syn/ppa.yaml\$" || true
