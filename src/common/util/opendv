@@ -1,0 +1,50 @@
+#!/usr/bin/env bash
+# bankside's opendv wrapper: runs opendv inside its toolchain container.
+#
+# A copy of opendv's bin/opendv (github.com/idanhochman/opendv), with three
+# changes:
+#   - the image is pinned to the opendv release bankside is tested with;
+#     upgrading opendv means changing OPENDV_VERSION below, in a PR;
+#   - it only runs inside this repo, so the container never mounts anything
+#     else from the host;
+#   - it mounts the whole repo, not only the project, so a small project
+#     inside a module (the designer's toy harness in rtl/doc/examples/) can
+#     reach the module's rtl/.
+#
+# The repo is mounted at the same path inside the container, so every path in
+# the output is valid on the host too, and the working directory is kept, so
+# opendv finds its project (the nearest opendv.yaml with `targets:`) and the
+# target you are standing in.
+set -euo pipefail
+
+OPENDV_VERSION=0.1.1
+IMAGE="${OPENDV_IMAGE:-ghcr.io/idanhochman/opendv:$OPENDV_VERSION}"
+REPO="$(cd "$(dirname "$(readlink -f "$0")")/../../.." && pwd -P)"
+
+# Help needs no project: no arguments, `help`, or -h/--help anywhere.
+needs_project=1
+[ "$#" -eq 0 ] && needs_project=0
+[ "${1:-}" = "help" ] && needs_project=0
+for a in "$@"; do [ "$a" = "-h" ] || [ "$a" = "--help" ] && needs_project=0; done
+if [ "$needs_project" -eq 0 ]; then
+    exec docker run --rm "$IMAGE" opendv "$@"
+fi
+
+here="$(pwd -P)"
+case "$here/" in
+    "$REPO"/*) ;;
+    *) echo "opendv: run it from inside the bankside repo ($REPO), not $here" >&2
+       exit 2 ;;
+esac
+
+# Test code runs in the container with the repo mounted, so the user-only
+# paths (CLAUDE.md, Ownership) are mounted again read-only on top.
+ro=()
+for p in .git .claude CLAUDE.md src/common/util requirements-dev.txt; do
+    [ -e "$REPO/$p" ] && ro+=(-v "$REPO/$p:$REPO/$p:ro")
+done
+
+tty=()
+[ -t 1 ] && tty=(-t)
+exec docker run --rm "${tty[@]}" --user "$(id -u):$(id -g)" -e HOME=/tmp \
+    -v "$REPO:$REPO" "${ro[@]}" -w "$here" "$IMAGE" opendv "$@"

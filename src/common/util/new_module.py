@@ -17,7 +17,7 @@ created.
 
 The architect runs this; the template and the script are the user's. After it:
 describe the module in its parent's doc; DV adds it to the root opendv.yaml
-once it has a test.
+(right away: opendv lints a target before it has tests).
 """
 import argparse
 import re
@@ -99,7 +99,7 @@ def main(argv=None):
     else:
         step = "" if a.parent == "none" else f"describe it in src/{a.parent}/doc/; "
         print(f"\nCreated src/{a.name}/. Next: {step}"
-              "DV adds it to the root opendv.yaml once it has a test.")
+              "DV adds it to the root opendv.yaml.")
 
 
 if __name__ == "__main__":
