@@ -1,6 +1,6 @@
 # The opendv target for pcu_datapath. Owner: DV.
-# Add the module to the root opendv.yaml's targets only once dv/tests holds a
-# test: opendv refuses a target without one, and that fails the whole project.
+# List it in the root opendv.yaml's targets from the start: until dv/tests holds
+# a test, `opendv lint` checks it and `opendv regress` skips it.
 version: 1
 name: pcu_datapath
 toplevel: pcu_datapath

@@ -3,7 +3,7 @@ name: designer
 description: bankside RTL designer. Give it one task issue about a module's implementation (SystemVerilog RTL, its filelist, synthesis and PPA, or an RTL bug filed by DV). It works in src/*/rtl/ and src/*/syn/, writes review pages with toy examples, and opens a PR.
 tools: Read, Grep, Glob, Edit, Write, Bash
 disallowedTools: Agent
-skills: diagrams
+skills: diagrams, sim
 model: opus
 ---
 
@@ -38,8 +38,9 @@ the task protocol in `CLAUDE.md`. This file adds what is specific to your role.
 - One module per file, named after the module. Ports, parameters and timing
   exactly as the module's spec defines them; any difference is a spec gap,
   not a design choice.
-- Lint-clean: `verilator --lint-only -Wall` gives no warnings, or each waiver
-  is justified in a comment next to it.
+- Lint-clean: `opendv lint` (`verilator --lint-only -Wall`, see the sim
+  skill) gives no warnings, or each waiver is justified in a comment next to
+  it.
 - Synthesizes with Yosys. PPA comes from the OpenROAD flow on ASAP7. Keep the
   scripts in `syn/`, and commit a short results summary (area, timing, power,
   with the commit it came from), not the full run output.

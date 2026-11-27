@@ -9,7 +9,8 @@ user's own session, with no `agent_type`, passes through.
   in CLAUDE.md), plus scratch files in the temp dir. Nobody but the user
   writes .claude/, CLAUDE.md, src/common/util/ or .git/. An agent type not in
   the table writes nothing in the repo.
-- Bash: the commands no agent may run (gh api, merges, force pushes, ...), and
+- Bash: the commands no agent may run (gh api, merges, force pushes, raw
+  docker, ...), and
   any gh or git push outside a session started by .claude/lead.sh, which is
   what points them at the agent token instead of the user's login.
 
@@ -48,6 +49,11 @@ FORBIDDEN = [
     (r"GIT_SSH|sshCommand|SSH_AUTH_SOCK|\bssh\s|credential\.helper|"
      r"insteadOf|\bGH_TOKEN\b|\bGITHUB_TOKEN\b|agent-gh-token",
      "don't touch git or gh credentials"),
+    # A container can mount any host path (~/.ssh, the agent token), so agents
+    # reach Docker only through the pinned wrapper, which mounts only the repo.
+    (r"(^|[\s;&|(`$])(sudo\s+)?(docker|podman|nerdctl)(\s|$)|docker\.sock|"
+     r"\bDOCKER_HOST\b|\bOPENDV_IMAGE\b",
+     "run the simulator only through src/common/util/opendv (the sim skill)"),
 ]
 NEEDS_AGENT_TOKEN = r"\bgh\s|\bgit\s+(push|fetch|pull|ls-remote)\b"
 

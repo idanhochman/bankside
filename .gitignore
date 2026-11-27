@@ -2,3 +2,9 @@
 __pycache__/
 CLAUDE.local.md
 .claude/settings.local.json
+
+# opendv results (sim/ from `opendv run`, regress/ from `opendv regress`)
+/sim/
+/regress/
+src/**/sim/
+src/**/regress/
